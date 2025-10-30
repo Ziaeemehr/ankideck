@@ -9,15 +9,15 @@ A Python package providing tools to automate the process of creating Anki decks 
 pip install -e .
 
 # Extract text from a PDF
-extract-text document.pdf
+extract_text document.pdf
 
 # Fix CSV formatting issues
-fix-csv-commas flashcards.csv
+fix_comma flashcards.csv
 
 # Import csv file into the Anki app
 
-# Add TTS audio to Anki cards
-add-tts-general "My French Deck"
+# Add TTS audio to Anki cards, keep anki open and alreay install AnkiConnect add-ons
+add_tts "My French Deck"
 ```
 
 **Note**: If the commands are not found, you may need to add Python's bin directory to your PATH:
@@ -72,9 +72,9 @@ export PATH="$PATH:/Library/Frameworks/Python.framework/Versions/3.8/bin"
 After installation, use the console scripts from anywhere:
 
 ```bash
-extract-text document.pdf
-fix-csv-commas input.csv output.csv
-add-tts-general "My Deck"
+extract_text document.pdf
+fix_comma input.csv output.csv
+add_tts "My Deck"
 ```
 
 ### Direct Python Execution
@@ -83,8 +83,8 @@ You can also run the scripts directly:
 
 ```bash
 python3 -m ankideck.extract_text document.pdf
-python3 -m ankideck.fix_csv_commas input.csv output.csv
-python3 -m ankideck.add_tts_general "My Deck"
+python3 -m ankideck.fix_comma input.csv output.csv
+python3 -m ankideck.add_tts "My Deck"
 ```
 
 ### From Package Directory
@@ -94,8 +94,8 @@ If you prefer to run from the package directory:
 ```bash
 cd src/ankideck
 python3 extract_text.py document.pdf
-python3 fix_csv_commas.py input.csv output.csv
-python3 add_tts_general.py "My Deck"
+python3 fix_comma.py input.csv output.csv
+python3 add_tts.py "My Deck"
 ```
 
 ### 1. Extract Text from PDF
@@ -103,7 +103,7 @@ python3 add_tts_general.py "My Deck"
 Run the text extraction script on your PDF:
 
 ```bash
-extract-text path/to/your/document.pdf [output.txt] [language]
+extract_text path/to/your/document.pdf [output.txt] [language]
 ```
 
 - `path/to/your/document.pdf`: Path to the PDF file.
@@ -123,7 +123,7 @@ Divide the extracted text into chunks and use a GPT tool (e.g., ChatGPT or a cus
 If your CSV has formatting issues with commas:
 
 ```bash
-fix-csv-commas input.csv [output.csv]
+fix_comma input.csv [output.csv]
 ```
 
 - Keeps the first comma as separator.
@@ -142,7 +142,7 @@ fix-csv-commas input.csv [output.csv]
 Run the TTS addition script:
 
 ```bash
-add-tts-general <deck_name>
+add_tts <deck_name>
 ```
 
 Configure the script variables at the top:
@@ -162,9 +162,9 @@ Once your deck is ready, sync and share via AnkiWeb.
 
 The `ankideck` package provides the following command-line tools:
 
-- **`extract-text`**: Performs OCR on PDFs to extract text. Supports multiple languages.
-- **`add-tts-general`**: Adds Google TTS audio to both Front and Back fields of Anki cards via AnkiConnect. Supports pauses in Back field audio. Caches audio files to avoid re-generation.
-- **`fix-csv-commas`**: Fixes CSV formatting for proper Anki import, handling extra commas in flashcard content.
+- **`extract_text`**: Performs OCR on PDFs to extract text. Supports multiple languages.
+- **`add_tts`**: Adds Google TTS audio to both Front and Back fields of Anki cards via AnkiConnect. Supports pauses in Back field audio. Caches audio files to avoid re-generation.
+- **`fix_comma`**: Fixes CSV formatting for proper Anki import, handling extra commas in flashcard content.
 
 ## Resources
 
@@ -181,8 +181,8 @@ The package is structured as follows:
 src/ankideck/
 ├── __init__.py          # Package initialization
 ├── extract_text.py      # OCR text extraction
-├── fix_csv_commas.py    # CSV formatting utilities
-└── add_tts_general.py   # TTS addition functionality
+├── fix_comma.py         # CSV formatting utilities
+└── add_tts.py           # TTS addition functionality
 ```
 
 To extend the package:
@@ -202,7 +202,7 @@ To extend the package:
 - **OCR Issues**: Ensure Tesseract is installed and the correct language pack is available.
 - **AnkiConnect Errors**: Verify Anki is running with AnkiConnect enabled.
 - **TTS Failures**: Check internet connection for Google TTS.
-- **CSV Import Problems**: Use `fix-csv-commas` to resolve formatting issues.
+- **CSV Import Problems**: Use `fix_comma` to resolve formatting issues.
 
 ## Contributing
 
