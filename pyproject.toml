@@ -1,0 +1,62 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ankideck"
+version = "0.1.0"
+description = "Tools for creating Anki decks from PDF documents with OCR and TTS"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.8"
+authors = [
+    {name = "Your Name", email = "your.email@example.com"},
+]
+maintainers = [
+    {name = "Your Name", email = "your.email@example.com"},
+]
+keywords = ["anki", "ocr", "tts", "flashcards", "pdf"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Education",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Education",
+    "Topic :: Multimedia :: Sound/Audio :: Speech",
+    "Topic :: Text Processing :: General",
+]
+dependencies = [
+    "gtts>=2.5.0",
+    "requests>=2.31.0",
+    "tqdm>=4.65.0",
+    "pytesseract>=0.3.10",
+    "pdf2image>=1.17.0",
+    "pydub>=0.25.1",
+]
+
+[project.urls]
+Homepage = "https://github.com/ziaeemehr/ankideck"
+Documentation = "https://github.com/ziaeemehr/ankideck#readme"
+Repository = "https://github.com/ziaeemehr/ankideck.git"
+Issues = "https://github.com/ziaeemehr/ankideck/issues"
+Changelog = "https://github.com/ziaeemehr/ankideck/blob/main/CHANGELOG.md"
+
+[project.scripts]
+extract_text = "ankideck.extract_text:main"
+fix_comma = "ankideck.fix_comma:main"
+add_tts = "ankideck.add_tts:main"
+
+[tool.setuptools]
+zip-safe = false
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-dir]
+"" = "src"

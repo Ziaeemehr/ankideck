@@ -1,0 +1,6 @@
+gtts
+requests
+tqdm
+pytesseract
+pdf2image
+pydub
