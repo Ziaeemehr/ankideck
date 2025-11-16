@@ -12,7 +12,7 @@ pip install -e .
 extract_text document.pdf
 
 # Fix CSV formatting issues
-fix_comma flashcards.csv
+fix_format flashcards.csv
 
 # Import csv file into the Anki app
 
@@ -73,7 +73,7 @@ After installation, use the console scripts from anywhere:
 
 ```bash
 extract_text document.pdf
-fix_comma input.csv output.csv
+fix_format input.csv output.csv
 add_tts "My Deck"
 ```
 
@@ -83,7 +83,7 @@ You can also run the scripts directly:
 
 ```bash
 python3 -m ankideck.extract_text document.pdf
-python3 -m ankideck.fix_comma input.csv output.csv
+python3 -m ankideck.fix_format input.csv output.csv
 python3 -m ankideck.add_tts "My Deck"
 ```
 
@@ -94,7 +94,7 @@ If you prefer to run from the package directory:
 ```bash
 cd src/ankideck
 python3 extract_text.py document.pdf
-python3 fix_comma.py input.csv output.csv
+python3 fix_format.py input.csv output.csv
 python3 add_tts.py "My Deck"
 ```
 
@@ -120,15 +120,15 @@ Divide the extracted text into chunks and use a GPT tool (e.g., ChatGPT or a cus
 
 ### 3. Fix CSV Formatting (if needed)
 
-If your CSV has formatting issues with commas:
+If your CSV has formatting issues with delimiters:
 
 ```bash
-fix_comma input.csv [output.csv]
+fix_format input.csv [output.csv]
 ```
 
-- Keeps the first comma as separator.
-- Replaces other commas with semicolons.
-- Appends a comma if no separator exists.
+- By default, keeps the first comma as separator and replaces others with semicolons.
+- Supports flexible delimiter handling with `--find` and `--replace` options.
+- Appends a delimiter if no separator exists to ensure proper column structure.
 
 ### 4. Import to Anki
 
@@ -164,7 +164,7 @@ The `ankideck` package provides the following command-line tools:
 
 - **`extract_text`**: Performs OCR on PDFs to extract text. Supports multiple languages.
 - **`add_tts`**: Adds Google TTS audio to both Front and Back fields of Anki cards via AnkiConnect. Supports pauses in Back field audio. Caches audio files to avoid re-generation.
-- **`fix_comma`**: Fixes CSV formatting for proper Anki import, handling extra commas in flashcard content.
+- **`fix_format`**: Fixes CSV formatting for proper Anki import, handling delimiter issues in flashcard content with flexible character replacement options.
 
 ## Resources
 
@@ -181,7 +181,7 @@ The package is structured as follows:
 src/ankideck/
 ├── __init__.py          # Package initialization
 ├── extract_text.py      # OCR text extraction
-├── fix_comma.py         # CSV formatting utilities
+├── fix_format.py        # CSV formatting utilities
 └── add_tts.py           # TTS addition functionality
 ```
 
@@ -202,7 +202,7 @@ To extend the package:
 - **OCR Issues**: Ensure Tesseract is installed and the correct language pack is available.
 - **AnkiConnect Errors**: Verify Anki is running with AnkiConnect enabled.
 - **TTS Failures**: Check internet connection for Google TTS.
-- **CSV Import Problems**: Use `fix_comma` to resolve formatting issues.
+- **CSV Import Problems**: Use `fix_format` to resolve delimiter formatting issues.
 
 ## Contributing
 
