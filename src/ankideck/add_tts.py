@@ -2,19 +2,28 @@ import base64
 import os
 import re
 import sys
-import time
-from gtts import gTTS
-import requests
 from tqdm import tqdm
-from pydub import AudioSegment
+from ankideck.utils import invoke, strip_html, make_tts
+
 
 
 def main():
     if len(sys.argv) < 2:
-        print("Usage: python add_tts_general.py <deck_name>")
+        print("Usage: python add_tts.py <deck_name> [tts_engine] [elevenlabs_api_key_file] [add_back_voice]")
+        print("  deck_name: Name of the Anki deck")
+        print("  tts_engine: 'gtts' or 'elevenlabs' (default: 'gtts')")
+        print("  elevenlabs_api_key_file: Path to ElevenLabs API key file")
+        print("                           (default: '/Users/tng/Projects/Language/FR/Anki_decks/elevenlabs_api_key.txt')")
+        print("  add_back_voice: 'true' or 'false' - whether to add voice for Back field (default: 'true')")
         sys.exit(1)
 
     DECK_NAME = sys.argv[1].replace(" ", "_")
+    
+    # TTS Engine Selection: "gtts" or "elevenlabs"
+    TTS_ENGINE = sys.argv[2] if len(sys.argv) > 2 else "gtts"
+    ELEVENLABS_API_KEY_FILE = sys.argv[3] if len(sys.argv) > 3 else "/Users/tng/Projects/Language/FR/Anki_decks/elevenlabs_api_key.txt"
+    ADD_BACK_VOICE = sys.argv[4].lower() in ('true', 'yes', '1') if len(sys.argv) > 4 else True
+    
     FRONT_FIELD = "Front"   # فیلد جمله یا عبارت فرانسوی
     BACK_FIELD = "Back"     # فیلد توضیح و مثال‌ها
     LANG = "fr"
@@ -26,47 +35,12 @@ def main():
 
     os.makedirs(CACHE_DIR, exist_ok=True)
 
-    def invoke(action, **params):
-        r = requests.post("http://localhost:8765", json={
-            "action": action,
-            "version": 6,
-            "params": params
-        }).json()
-        if r.get("error"):
-            raise Exception(r["error"])
-        return r["result"]
-
-    def strip_html(text):
-        return re.sub(r"<.*?>", "", text).strip()
-
-    def make_tts(sentences, filename, pause=False):
-        """ساخت صدا با یا بدون مکث بین جمله‌ها"""
-        audio_path = os.path.join(CACHE_DIR, filename)
-        if os.path.exists(audio_path):
-            return audio_path
-
-        try:
-            combined = AudioSegment.silent(duration=0)
-            for sent in sentences:
-                if not sent.strip():
-                    continue
-                tts = gTTS(sent, lang=LANG, slow=TTS_SLOW)
-                temp_path = os.path.join(CACHE_DIR, "temp.mp3")
-                tts.save(temp_path)
-                clip = AudioSegment.from_mp3(temp_path)
-                combined += clip
-                if pause:
-                    combined += AudioSegment.silent(duration=PAUSE_DURATION)
-            combined.export(audio_path, format="mp3")
-            time.sleep(SLEEP_TIME)
-            return audio_path
-        except Exception as e:
-            print(f"⚠️ خطا در ساخت صدا: {e}")
-            return None
-
     # 1️⃣ یافتن کارت‌ها
     cards = invoke("findCards", query=f'deck:"{DECK_NAME}"')
-    print(f"✅ {len(cards)} کارت در دک '{DECK_NAME}' یافت شد.\n")
+    print(f"✅ {len(cards)} کارت در دک '{DECK_NAME}' یافت شد.")
+    print(f"🔊 موتور TTS: {TTS_ENGINE.upper()}")
+    print(f"📝 افزودن صدا به Front: بله")
+    print(f"📝 افزودن صدا به Back: {'بله' if ADD_BACK_VOICE else 'خیر'}\n")
 
     notes = invoke("cardsToNotes", cards=cards)
     notes_info = invoke("notesInfo", notes=notes)
@@ -87,7 +61,18 @@ def main():
             if clean_front:
                 front_name = f"tts_{note_id}_front.mp3"
                 front_sentences = [clean_front]
-                path = make_tts(front_sentences, front_name, pause=False)
+                path = make_tts(
+                    sentences=front_sentences, 
+                    filename=front_name, 
+                    cache_dir=CACHE_DIR,
+                    engine=TTS_ENGINE,
+                    pause=False,
+                    pause_duration=PAUSE_DURATION,
+                    lang=LANG,
+                    tts_slow=TTS_SLOW,
+                    sleep_time=SLEEP_TIME,
+                    elevenlabs_api_key_file=ELEVENLABS_API_KEY_FILE
+                )
                 if path:
                     with open(path, "rb") as f:
                         audio_b64 = base64.b64encode(f.read()).decode()
@@ -97,12 +82,23 @@ def main():
                     invoke("updateNoteFields", note={"id": note_id, "fields": {FRONT_FIELD: new_val}})
 
         # ---------- BACK ----------
-        if back_val.strip() and "[sound:" not in back_val:
+        if ADD_BACK_VOICE and back_val.strip() and "[sound:" not in back_val:
             clean_back = strip_html(back_val)
             if clean_back:
                 back_name = f"tts_{note_id}_back.mp3"
                 back_sentences = re.split(r'(?<=[.?!;])\s+', clean_back)
-                path = make_tts(back_sentences, back_name, pause=True)
+                path = make_tts(
+                    sentences=back_sentences, 
+                    filename=back_name, 
+                    cache_dir=CACHE_DIR,
+                    engine=TTS_ENGINE,
+                    pause=True,
+                    pause_duration=PAUSE_DURATION,
+                    lang=LANG,
+                    tts_slow=TTS_SLOW,
+                    sleep_time=SLEEP_TIME,
+                    elevenlabs_api_key_file=ELEVENLABS_API_KEY_FILE
+                )
                 if path:
                     with open(path, "rb") as f:
                         audio_b64 = base64.b64encode(f.read()).decode()
@@ -111,7 +107,10 @@ def main():
                     new_val = back_val + sound_tag
                     invoke("updateNoteFields", note={"id": note_id, "fields": {BACK_FIELD: new_val}})
 
-    print("\n✅ تلفظ‌ها برای هر دو فیلد (Front و Back) با مکث طبیعی ساخته شدند 🎧")
+    if ADD_BACK_VOICE:
+        print("\n✅ تلفظ‌ها برای هر دو فیلد (Front و Back) با مکث طبیعی ساخته شدند 🎧")
+    else:
+        print("\n✅ تلفظ‌ها برای فیلد Front ساخته شدند 🎧")
 
 
 if __name__ == "__main__":
