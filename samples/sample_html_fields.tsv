@@ -1,0 +1,5 @@
+Front	Back
+<b>Où se trouve... ?</b>	<div><b>Type:</b> expression / question<br>• <b>Où se trouve</b> la gare s'il vous plaît ?<br>• <b>Où se trouve</b> la banque ?</div>
+<b>Je cherche la rue...</b>	<div><b>Type:</b> expression utile<br>• <b>Je cherche</b> la rue Victor Hugo.<br>• <b>Je cherche</b> la poste.</div>
+<b><span style="color:#2b6cb0;">Allez tout droit.</span></b>	<div><b>Type:</b> <span style="color:#d97706;">impératif / direction</span><br>• <b>Allez tout droit</b> jusqu'au feu.<br>• <b>Allez tout droit</b> et tournez à gauche.</div>
+<b><span style="color:#2b6cb0;">Tournez à droite.</span></b>	<div><b>Type:</b> <span style="color:#d97706;">impératif / direction</span><br>• <b>Tournez à droite</b> après la banque.</div>

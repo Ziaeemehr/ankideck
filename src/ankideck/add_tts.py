@@ -3,32 +3,40 @@ import os
 import re
 import sys
 from tqdm import tqdm
-from ankideck.utils import invoke, strip_html, make_tts
+from ankideck.anki_connect import invoke
+from ankideck.tts import make_tts, strip_html
 
 
 
 def main():
     if len(sys.argv) < 2:
-        print("Usage: python add_tts.py <deck_name> [tts_engine] [elevenlabs_api_key_file] [add_back_voice]")
+        print("Usage: python add_tts.py <deck_name> [front_engine] [back_engine] [elevenlabs_api_key_file]")
         print("  deck_name: Name of the Anki deck")
-        print("  tts_engine: 'gtts' or 'elevenlabs' (default: 'gtts')")
+        print("  front_engine: 'gtts' or 'elevenlabs' (default: 'gtts')")
+        print("  back_engine: 'gtts', 'elevenlabs', or 'none' to skip Back (default: 'gtts')")
         print("  elevenlabs_api_key_file: Path to ElevenLabs API key file")
         print("                           (default: '/Users/tng/Projects/Language/FR/Anki_decks/elevenlabs_api_key.txt')")
-        print("  add_back_voice: 'true' or 'false' - whether to add voice for Back field (default: 'true')")
+        print("\nExamples:")
+        print("  python add_tts.py 'My Deck'  # Both fields with gtts")
+        print("  python add_tts.py 'My Deck' elevenlabs gtts  # Front with ElevenLabs, Back with gtts")
+        print("  python add_tts.py 'My Deck' elevenlabs none  # Only Front with ElevenLabs")
         sys.exit(1)
 
     DECK_NAME = sys.argv[1].replace(" ", "_")
     
-    # TTS Engine Selection: "gtts" or "elevenlabs"
-    TTS_ENGINE = sys.argv[2] if len(sys.argv) > 2 else "gtts"
-    ELEVENLABS_API_KEY_FILE = sys.argv[3] if len(sys.argv) > 3 else "/Users/tng/Projects/Language/FR/Anki_decks/elevenlabs_api_key.txt"
-    ADD_BACK_VOICE = sys.argv[4].lower() in ('true', 'yes', '1') if len(sys.argv) > 4 else True
+    # TTS Engine Selection for Front and Back
+    FRONT_ENGINE = sys.argv[2] if len(sys.argv) > 2 else "gtts"
+    BACK_ENGINE = sys.argv[3] if len(sys.argv) > 3 else "gtts"
+    ELEVENLABS_API_KEY_FILE = sys.argv[4] if len(sys.argv) > 4 else "/Users/tng/Projects/Language/FR/Anki_decks/elevenlabs_api_key.txt"
+    
+    # Check if back voice should be added
+    ADD_BACK_VOICE = BACK_ENGINE.lower() != "none"
     
     FRONT_FIELD = "Front"   # فیلد جمله یا عبارت فرانسوی
     BACK_FIELD = "Back"     # فیلد توضیح و مثال‌ها
     LANG = "fr"
     TTS_SLOW = False
-    SLEEP_TIME = 0.4
+    SLEEP_TIME = 1.0
     CACHE_DIR = f"tts_cache_{DECK_NAME}"
     PAUSE_DURATION = 700  # milliseconds
     # -----------------------------
@@ -38,9 +46,8 @@ def main():
     # 1️⃣ یافتن کارت‌ها
     cards = invoke("findCards", query=f'deck:"{DECK_NAME}"')
     print(f"✅ {len(cards)} کارت در دک '{DECK_NAME}' یافت شد.")
-    print(f"🔊 موتور TTS: {TTS_ENGINE.upper()}")
-    print(f"📝 افزودن صدا به Front: بله")
-    print(f"📝 افزودن صدا به Back: {'بله' if ADD_BACK_VOICE else 'خیر'}\n")
+    print(f"🔊 موتور TTS برای Front: {FRONT_ENGINE.upper()}")
+    print(f"� موتور TTS برای Back: {BACK_ENGINE.upper() if ADD_BACK_VOICE else 'خیر'}\n")
 
     notes = invoke("cardsToNotes", cards=cards)
     notes_info = invoke("notesInfo", notes=notes)
@@ -58,14 +65,14 @@ def main():
         # ---------- FRONT ----------
         if front_val.strip() and "[sound:" not in front_val:
             clean_front = strip_html(front_val)
-            if clean_front:
+            if clean_front.strip():
                 front_name = f"tts_{note_id}_front.mp3"
                 front_sentences = [clean_front]
                 path = make_tts(
                     sentences=front_sentences, 
                     filename=front_name, 
                     cache_dir=CACHE_DIR,
-                    engine=TTS_ENGINE,
+                    engine=FRONT_ENGINE,
                     pause=False,
                     pause_duration=PAUSE_DURATION,
                     lang=LANG,
@@ -75,7 +82,11 @@ def main():
                 )
                 if path:
                     with open(path, "rb") as f:
-                        audio_b64 = base64.b64encode(f.read()).decode()
+                        audio_data = f.read()
+                        if not audio_data:
+                            print(f"⚠️ Skipping empty audio for front of note {note_id}")
+                            continue
+                        audio_b64 = base64.b64encode(audio_data).decode()
                     invoke("storeMediaFile", filename=front_name, data=audio_b64)
                     sound_tag = f"<br>[sound:{front_name}]"
                     new_val = front_val + sound_tag
@@ -84,14 +95,14 @@ def main():
         # ---------- BACK ----------
         if ADD_BACK_VOICE and back_val.strip() and "[sound:" not in back_val:
             clean_back = strip_html(back_val)
-            if clean_back:
+            if clean_back.strip():
                 back_name = f"tts_{note_id}_back.mp3"
                 back_sentences = re.split(r'(?<=[.?!;])\s+', clean_back)
                 path = make_tts(
                     sentences=back_sentences, 
                     filename=back_name, 
                     cache_dir=CACHE_DIR,
-                    engine=TTS_ENGINE,
+                    engine=BACK_ENGINE,
                     pause=True,
                     pause_duration=PAUSE_DURATION,
                     lang=LANG,
@@ -101,7 +112,11 @@ def main():
                 )
                 if path:
                     with open(path, "rb") as f:
-                        audio_b64 = base64.b64encode(f.read()).decode()
+                        audio_data = f.read()
+                        if not audio_data:
+                            print(f"⚠️ Skipping empty audio for back of note {note_id}")
+                            continue
+                        audio_b64 = base64.b64encode(audio_data).decode()
                     invoke("storeMediaFile", filename=back_name, data=audio_b64)
                     sound_tag = f"<br>[sound:{back_name}]"
                     new_val = back_val + sound_tag

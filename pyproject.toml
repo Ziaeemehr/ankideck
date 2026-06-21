@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ankideck"
-version = "0.1.0"
+version = "0.2.0"
 description = "Tools for creating Anki decks from PDF documents with OCR and TTS"
 readme = "README.md"
 license = {text = "MIT"}
@@ -38,6 +38,8 @@ dependencies = [
     "pytesseract>=0.3.10",
     "pdf2image>=1.17.0",
     "pydub>=0.25.1",
+    "pypdf>=4.0.0",
+    "genanki>=0.13.0",
 ]
 
 [project.urls]
@@ -48,9 +50,18 @@ Issues = "https://github.com/ziaeemehr/ankideck/issues"
 Changelog = "https://github.com/ziaeemehr/ankideck/blob/main/CHANGELOG.md"
 
 [project.scripts]
+ankideck-build = "ankideck.builder:main"
+ankideck-import = "ankideck.import_to_anki:main"
+ankideck-fix = "ankideck.fix_format:main"
+ankideck-tts = "ankideck.add_tts:main"
+ankideck-ocr = "ankideck.extract_text:main"
+ankideck-split-pdf = "ankideck.split_pdf:main"
+# legacy aliases
 extract_text = "ankideck.extract_text:main"
-fix_comma = "ankideck.fix_comma:main"
+fix_format = "ankideck.fix_format:main"
 add_tts = "ankideck.add_tts:main"
+split_pdf = "ankideck.split_pdf:main"
+import_to_anki = "ankideck.import_to_anki:main"
 
 [tool.setuptools]
 zip-safe = false

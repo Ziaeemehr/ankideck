@@ -150,5 +150,26 @@ cython_debug/
 ehthumbs.db
 Thumbs.db
 
-# custome directory to ignore
+# custom directories to ignore
 _e/
+
+# Input data files — put yours in csv/ or any folder
+# Sample files are in samples/ and are tracked in git
+csv/*.csv
+csv/*.tsv
+csv/*.txt
+csv/*.json
+!csv/.gitkeep
+
+# Anki output files
+*.apkg
+
+# TTS audio cache directories
+tts_cache_*/
+
+# Backup files created by fix_format --inplace
+*.bak
+
+# API keys — never commit these
+*api_key*.txt
+*_api_key*
