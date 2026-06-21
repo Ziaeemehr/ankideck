@@ -94,15 +94,40 @@ def _generate_tts(
     fields have the sound tag appended and media_files is the list of
     generated MP3 paths.
     """
+    from tqdm import tqdm
     from ankideck.tts import make_tts, strip_html
 
     os.makedirs(cache_dir, exist_ok=True)
     media_files: List[str] = []
     updated: List[Card] = []
 
-    for i, card in enumerate(cards):
+    # Count how many actually need generation (not already cached)
+    need_front = sum(
+        1 for i, c in enumerate(cards)
+        if (c.tts_front or strip_html(c.front)).strip()
+        and not os.path.exists(os.path.join(cache_dir, f"tts_front_{i:04d}.mp3"))
+    )
+    need_back = sum(
+        1 for i, c in enumerate(cards)
+        if c.tts_back.strip()
+        and not os.path.exists(os.path.join(cache_dir, f"tts_back_{i:04d}.mp3"))
+    )
+    cached = len(cards) - need_front  # rough cached count for front
+
+    if cached > 0:
+        print(f"  {cached} front audio file(s) already cached, skipping.")
+
+    bar = tqdm(
+        enumerate(cards),
+        total=len(cards),
+        desc="Generating audio",
+        unit="card",
+        ncols=72,
+    )
+
+    for i, card in bar:
         front_text = card.tts_front or strip_html(card.front)
-        back_text = card.tts_back  # empty string = no back audio
+        back_text = card.tts_back
 
         new_front = card.front
         new_back = card.back
@@ -110,6 +135,7 @@ def _generate_tts(
         # --- front audio ---
         if front_text.strip():
             fname = f"tts_front_{i:04d}.mp3"
+            bar.set_postfix_str(f"front: {front_text[:20]}", refresh=False)
             path = make_tts([front_text], fname, cache_dir, lang=lang)
             if path:
                 media_files.append(path)
@@ -118,6 +144,7 @@ def _generate_tts(
         # --- back audio (example sentence) ---
         if back_text.strip():
             fname = f"tts_back_{i:04d}.mp3"
+            bar.set_postfix_str(f"example: {back_text[:20]}", refresh=False)
             path = make_tts([back_text], fname, cache_dir, lang=lang)
             if path:
                 media_files.append(path)
@@ -171,12 +198,16 @@ def write_apkg(
     extra_media: List[str] = []
 
     if tts_lang:
+        print(f"Generating TTS audio (lang={tts_lang}) into '{tts_cache_dir}/'...")
         all_cards, extra_media = _generate_tts(all_cards, tts_lang, tts_cache_dir)
+        print(f"  {len(extra_media)} audio file(s) ready.")
 
+    print(f"Building deck '{deck_name}' ({len(all_cards)} cards)...")
     deck = build_deck(deck_name, all_cards)
     pkg = genanki.Package(deck)
     pkg.media_files = list(media_files or []) + extra_media
     pkg.write_to_file(output_path)
+    print(f"Written: {output_path}")
     return len(all_cards)
 
 
