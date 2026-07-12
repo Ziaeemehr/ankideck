@@ -1,12 +1,13 @@
 """Text-to-speech generation for Anki card audio.
 
 Supported engines:
+  - edge: Microsoft Edge TTS (free, requires internet, natural-sounding voices) [default]
   - gtts: Google Text-to-Speech (free, requires internet)
   - elevenlabs: ElevenLabs API (higher quality, requires API key)
 
 Usage example:
     from ankideck.tts import make_tts
-    path = make_tts(["Bonjour le monde"], "hello.mp3", "tts_cache", engine="gtts", lang="fr")
+    path = make_tts(["Bonjour le monde"], "hello.mp3", "tts_cache", engine="edge", lang="fr")
 """
 
 import os
@@ -64,6 +65,63 @@ def make_tts_gtts(
         return None
 
 
+# Default Edge TTS voice per language code. Override with the `voice`
+# argument or by passing a full voice name as `lang` (e.g. "fr-FR-HenriNeural").
+EDGE_DEFAULT_VOICES = {
+    "fr": "fr-FR-DeniseNeural",
+    "en": "en-US-AriaNeural",
+    "de": "de-DE-KatjaNeural",
+    "es": "es-ES-ElviraNeural",
+    "it": "it-IT-ElsaNeural",
+    "pt": "pt-BR-FranciscaNeural",
+    "fa": "fa-IR-DilaraNeural",
+}
+
+
+def make_tts_edge(
+    sentences: List[str],
+    audio_path: str,
+    lang: str = "fr",
+    voice: Optional[str] = None,
+    pause: bool = False,
+    pause_duration: int = 700,
+) -> Optional[str]:
+    """Generate audio using Microsoft Edge TTS and save to audio_path.
+
+    Returns the path on success, None on failure.
+    """
+    import asyncio
+    import edge_tts
+    from pydub import AudioSegment
+
+    voice_name = voice or EDGE_DEFAULT_VOICES.get(lang, lang)
+    cache_dir = os.path.dirname(audio_path) or "."
+    os.makedirs(cache_dir, exist_ok=True)
+
+    async def _synth(text: str, out_path: str) -> None:
+        communicate = edge_tts.Communicate(text, voice_name)
+        await communicate.save(out_path)
+
+    try:
+        combined = AudioSegment.silent(duration=0)
+        temp_path = os.path.join(cache_dir, "_tmp_tts_edge.mp3")
+
+        for sent in sentences:
+            if not sent.strip():
+                continue
+            asyncio.run(_synth(sent, temp_path))
+            clip = AudioSegment.from_mp3(temp_path)
+            combined += clip
+            if pause:
+                combined += AudioSegment.silent(duration=pause_duration)
+
+        combined.export(audio_path, format="mp3")
+        return audio_path
+    except Exception as e:
+        print(f"Edge TTS error: {e}")
+        return None
+
+
 def make_tts_elevenlabs(
     text: str,
     api_key_file: str,
@@ -106,13 +164,14 @@ def make_tts(
     sentences: List[str],
     filename: str,
     cache_dir: str,
-    engine: str = "gtts",
+    engine: str = "edge",
     pause: bool = False,
     pause_duration: int = 700,
     lang: str = "fr",
     tts_slow: bool = False,
     sleep_time: float = 0.4,
     elevenlabs_api_key_file: Optional[str] = None,
+    voice: Optional[str] = None,
 ) -> Optional[str]:
     """Generate TTS audio and cache it to disk.
 
@@ -137,13 +196,23 @@ def make_tts(
             cache_dir=cache_dir,
         )
 
-    # Default: gTTS
-    return make_tts_gtts(
+    if engine == "gtts":
+        return make_tts_gtts(
+            sentences=sentences,
+            audio_path=audio_path,
+            lang=lang,
+            pause=pause,
+            pause_duration=pause_duration,
+            tts_slow=tts_slow,
+            sleep_time=sleep_time,
+        )
+
+    # Default: Microsoft Edge TTS
+    return make_tts_edge(
         sentences=sentences,
         audio_path=audio_path,
         lang=lang,
+        voice=voice,
         pause=pause,
         pause_duration=pause_duration,
-        tts_slow=tts_slow,
-        sleep_time=sleep_time,
     )

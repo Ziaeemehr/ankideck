@@ -12,21 +12,21 @@ def main():
     if len(sys.argv) < 2:
         print("Usage: python add_tts.py <deck_name> [front_engine] [back_engine] [elevenlabs_api_key_file]")
         print("  deck_name: Name of the Anki deck")
-        print("  front_engine: 'gtts' or 'elevenlabs' (default: 'gtts')")
-        print("  back_engine: 'gtts', 'elevenlabs', or 'none' to skip Back (default: 'gtts')")
+        print("  front_engine: 'edge', 'gtts', or 'elevenlabs' (default: 'edge')")
+        print("  back_engine: 'edge', 'gtts', 'elevenlabs', or 'none' to skip Back (default: 'edge')")
         print("  elevenlabs_api_key_file: Path to ElevenLabs API key file")
         print("                           (default: '/Users/tng/Projects/Language/FR/Anki_decks/elevenlabs_api_key.txt')")
         print("\nExamples:")
-        print("  python add_tts.py 'My Deck'  # Both fields with gtts")
+        print("  python add_tts.py 'My Deck'  # Both fields with Edge TTS")
         print("  python add_tts.py 'My Deck' elevenlabs gtts  # Front with ElevenLabs, Back with gtts")
         print("  python add_tts.py 'My Deck' elevenlabs none  # Only Front with ElevenLabs")
         sys.exit(1)
 
     DECK_NAME = sys.argv[1].replace(" ", "_")
-    
+
     # TTS Engine Selection for Front and Back
-    FRONT_ENGINE = sys.argv[2] if len(sys.argv) > 2 else "gtts"
-    BACK_ENGINE = sys.argv[3] if len(sys.argv) > 3 else "gtts"
+    FRONT_ENGINE = sys.argv[2] if len(sys.argv) > 2 else "edge"
+    BACK_ENGINE = sys.argv[3] if len(sys.argv) > 3 else "edge"
     ELEVENLABS_API_KEY_FILE = sys.argv[4] if len(sys.argv) > 4 else "/Users/tng/Projects/Language/FR/Anki_decks/elevenlabs_api_key.txt"
     
     # Check if back voice should be added

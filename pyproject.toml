@@ -32,6 +32,7 @@ classifiers = [
     "Topic :: Text Processing :: General",
 ]
 dependencies = [
+    "edge-tts>=6.1.0",
     "gtts>=2.5.0",
     "requests>=2.31.0",
     "tqdm>=4.65.0",
