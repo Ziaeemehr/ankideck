@@ -33,11 +33,11 @@ fix_format flashcards.csv
 import_to_anki ./csv
 
 # Add TTS audio to Anki cards (keep Anki open with AnkiConnect installed)
-# Option 1: Both fields with gTTS (free)
+# Option 1: Both fields with Microsoft Edge TTS (free, default, natural voices)
 add_tts "My French Deck"
 
-# Option 2: Front with ElevenLabs, Back with gTTS (recommended)
-add_tts "My French Deck" elevenlabs gtts
+# Option 2: Front with ElevenLabs, Back with Edge TTS (recommended)
+add_tts "My French Deck" elevenlabs edge
 ```
 
 **Note**: If the commands are not found, you may need to add Python's bin directory to your PATH:
@@ -52,7 +52,7 @@ export PATH="$PATH:/Library/Frameworks/Python.framework/Versions/3.8/bin"
 - **Flashcard Generation**: Generate 2-column flashcards using GPT tools.
 - **CSV Handling**: Store and fix formatting issues in CSV files for Anki import.
 - **Deck Import**: Convert CSV files to Anki deck packages (.apkg files).
-- **Automated TTS**: Add text-to-speech audio to Anki cards using Google TTS and AnkiConnect.
+- **Automated TTS**: Add text-to-speech audio to Anki cards using Microsoft Edge TTS (default, free), Google TTS, or ElevenLabs, via AnkiConnect.
 - **Anki Integration**: Seamless import and modification of decks in Anki.
 
 ## Workflow
@@ -72,7 +72,7 @@ For building a single `.apkg` with one subdeck per chapter (e.g. a textbook), th
 
 1. Extract vocab/phrases per chapter into an `.xlsx` file (columns like `French`, `English`, `Persian`, `Example`).
 2. Read each chapter's xlsx with `read_cards_excel(...)` from `ankideck.reader`.
-3. Generate/cache TTS audio with `make_tts(...)` from `ankideck.tts`.
+3. Generate/cache TTS audio with `make_tts(...)` from `ankideck.tts` (defaults to the free Microsoft Edge TTS engine).
 4. Build one `genanki.Deck` per chapter (named `f"{PARENT}::{title}"`) and bundle them into a single `genanki.Package` → one `.apkg`.
 
 Other input formats (CSV, Excel, etc.) are supported the same way — just point the appropriate reader at your file and follow the same card → deck → package steps.

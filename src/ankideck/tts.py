@@ -88,6 +88,12 @@ def make_tts_edge(
 ) -> Optional[str]:
     """Generate audio using Microsoft Edge TTS and save to audio_path.
 
+    All sentences are sent as a single synthesis request (one network
+    round-trip) rather than one request per sentence, since Edge TTS has
+    no SSML break-tag support in this client and per-sentence round trips
+    dominate runtime on bulk decks. Edge's neural voices already pause
+    naturally at sentence-ending punctuation.
+
     Returns the path on success, None on failure.
     """
     import asyncio
@@ -98,22 +104,20 @@ def make_tts_edge(
     cache_dir = os.path.dirname(audio_path) or "."
     os.makedirs(cache_dir, exist_ok=True)
 
+    text = " ".join(s.strip() for s in sentences if s.strip())
+    if not text:
+        return None
+
     async def _synth(text: str, out_path: str) -> None:
         communicate = edge_tts.Communicate(text, voice_name)
         await communicate.save(out_path)
 
     try:
-        combined = AudioSegment.silent(duration=0)
         temp_path = os.path.join(cache_dir, "_tmp_tts_edge.mp3")
-
-        for sent in sentences:
-            if not sent.strip():
-                continue
-            asyncio.run(_synth(sent, temp_path))
-            clip = AudioSegment.from_mp3(temp_path)
-            combined += clip
-            if pause:
-                combined += AudioSegment.silent(duration=pause_duration)
+        asyncio.run(_synth(text, temp_path))
+        combined = AudioSegment.from_mp3(temp_path)
+        if pause:
+            combined += AudioSegment.silent(duration=pause_duration)
 
         combined.export(audio_path, format="mp3")
         return audio_path
