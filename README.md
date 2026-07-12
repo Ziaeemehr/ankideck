@@ -66,6 +66,19 @@ export PATH="$PATH:/Library/Frameworks/Python.framework/Versions/3.8/bin"
 7. **Add Voice**: Use `add_tts` command with AnkiConnect to automatically add TTS audio to cards.
 8. **Share Decks**: Share completed decks on AnkiWeb.
 
+## PDF → Hierarchical Anki Deck (Excel-based)
+
+For building a single `.apkg` with one subdeck per chapter (e.g. a textbook), the recommended workflow uses Excel instead of CSV:
+
+1. Extract vocab/phrases per chapter into an `.xlsx` file (columns like `French`, `English`, `Persian`, `Example`).
+2. Read each chapter's xlsx with `read_cards_excel(...)` from `ankideck.reader`.
+3. Generate/cache TTS audio with `make_tts(...)` from `ankideck.tts`.
+4. Build one `genanki.Deck` per chapter (named `f"{PARENT}::{title}"`) and bundle them into a single `genanki.Package` → one `.apkg`.
+
+Other input formats (CSV, Excel, etc.) are supported the same way — just point the appropriate reader at your file and follow the same card → deck → package steps.
+
+See [PDF_TO_ANKI_PIPELINE.md](PDF_TO_ANKI_PIPELINE.md) for the full step-by-step pipeline (chapter detection, page rendering, xlsx extraction conventions, deck-ordering tips, etc.).
+
 ## Prerequisites
 
 - Python 3.8+
