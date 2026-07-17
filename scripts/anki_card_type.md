@@ -75,7 +75,7 @@ page, so the field text is baked into the JS at render time — no DOM reading n
 
 Paste into the **Back Template** field:
 
-```
+```html
 <div id="frontword">{{FrontSide}}</div>
 <hr id="answer">
 {{Back}}
@@ -167,3 +167,144 @@ Paste into the **Back Template** field:
 - **Reverso** gives full conjugation tables, ideal for verbs.
 - The `{{FrontSide}}` at the top still renders the front normally (with audio player if TTS is present). The `#clickable-front` div below it adds the interactive version of the same text.
 - `window.open` works on Anki Desktop and AnkiMobile (iOS). On **AnkiDroid** it may be blocked — check *Settings → Advanced → Allow loading content from custom URL*.
+
+---
+
+## 4. Clickable-word popup — only on the French example line of Back
+
+The `Back` field is formatted, e.g.:
+
+```
+EN: to have to
+FA: مجبور بودن
+J'ai dû travailler tard lundi.
+
+[sound:tts_21_Ch18_Passe_compose_autres_3e_groupe_back_0004.mp3]
+```
+
+Wrapping *every* word in `Back` breaks that layout. Instead, split `Back` into
+lines, skip the `EN:` line, the `FA:` line, and the sound-tag line, and only
+apply the clickable-word treatment to the one line left over — the French
+example sentence.
+
+Anki's editor is inconsistent about how it encodes line breaks (sometimes
+`<div>` per line, sometimes `<br>`), so the script first normalizes the field's
+HTML into one `<div>` per line before inspecting it.
+
+Paste into the **Back Template** field:
+
+```html
+<div id="frontword">{{FrontSide}}</div>
+<hr id="answer">
+<div id="backword">{{Back}}</div>
+
+<!-- Floating popup menu (hidden until a word is clicked) -->
+<div id="word-menu" style="
+    display:none; position:fixed; z-index:9999;
+    background:#fff; border:1px solid #ccc; border-radius:8px;
+    box-shadow:0 4px 12px rgba(0,0,0,0.2); padding:8px; min-width:175px;">
+  <div id="menu-label" style="
+      font-weight:bold; font-size:13px; color:#555;
+      margin-bottom:6px; text-align:center; border-bottom:1px solid #eee; padding-bottom:4px;">
+  </div>
+  <button onclick="openReverso()" style="
+      display:block; width:100%; margin:3px 0; padding:6px 10px;
+      background:#2b6cb0; color:#fff; border:none; border-radius:5px;
+      font-size:13px; cursor:pointer;">
+    Conjugate — Reverso
+  </button>
+  <button onclick="openDict()" style="
+      display:block; width:100%; margin:3px 0; padding:6px 10px;
+      background:#276749; color:#fff; border:none; border-radius:5px;
+      font-size:13px; cursor:pointer;">
+    Dictionary — WordReference
+  </button>
+</div>
+
+<script>
+(function() {
+  function wrapWords(el) {
+    var text = el.innerText;
+    var words = text.split(/(\s+)/);
+    var html = "";
+    words.forEach(function(w) {
+      if (w.trim() === "") {
+        html += w;
+      } else {
+        var clean = w.replace(/[.,!?;:«»"']/g, "").toLowerCase();
+        html += '<span class="clickword" data-word="' + clean + '" style="cursor:pointer; text-decoration:underline dotted;">' + w + '</span>';
+      }
+    });
+    el.innerHTML = html;
+  }
+
+  // Front side: every word clickable (unchanged behavior)
+  wrapWords(document.getElementById("frontword"));
+
+  // Back side: normalize line breaks to one <div> per line, then only
+  // wrap the line that is the French example sentence.
+  var back = document.getElementById("backword");
+  var raw = back.innerHTML
+    .replace(/<\/div>/gi, "<br>")
+    .replace(/<div[^>]*>/gi, "");
+  var lines = raw.split(/<br\s*\/?>/i);
+  back.innerHTML = lines.map(function(l) { return "<div>" + l + "</div>"; }).join("");
+
+  back.querySelectorAll(":scope > div").forEach(function(line) {
+    var t = line.innerText.trim();
+    if (t === "") return;
+    if (/^EN\s*:/i.test(t)) return;
+    if (/^FA\s*:/i.test(t)) return;
+    if (t.indexOf("[sound:") !== -1) return;
+    wrapWords(line);
+  });
+
+  // Shared popup menu logic for both front and back clickwords
+  var currentWord = "";
+  var menu = document.getElementById("word-menu");
+
+  document.addEventListener("click", function(e) {
+    var span = e.target.closest ? e.target.closest(".clickword") : null;
+    if (!span) {
+      menu.style.display = "none";
+      return;
+    }
+    e.stopPropagation();
+    currentWord = span.dataset.word;
+    document.getElementById("menu-label").innerText = currentWord;
+    menu.style.display = "block";
+    var x = Math.min(e.clientX, window.innerWidth - 195);
+    var y = e.clientY + 14;
+    menu.style.left = x + "px";
+    menu.style.top = y + "px";
+  });
+
+  window.openReverso = function() {
+    window.open("https://conjugator.reverso.net/conjugation-french-verb-" + currentWord + ".html", "_blank");
+    menu.style.display = "none";
+  };
+
+  window.openDict = function() {
+    window.open("https://www.wordreference.com/fren/" + currentWord, "_blank");
+    menu.style.display = "none";
+  };
+})();
+</script>
+```
+
+### Why this works
+
+- `EN:` / `FA:` prefixes and `[sound:...]` are matched by regex on each
+  normalized line and skipped — their formatting is left untouched.
+- Blank lines are skipped too (`t === ""`).
+- Whatever line is left (the French sentence) gets the same
+  `wrapWords()` treatment as the front, so its words become clickable and
+  open the same Reverso/WordReference popup.
+
+### Caveat
+
+If your `EN:` / `FA:` labels use different text or the sound tag isn't the
+literal `[sound:...]` syntax, adjust the regexes at the top of the `forEach`
+loop accordingly. If a note ever has **no** sound tag and **no** blank line
+separating fields, this still works since it filters by content, not
+position.
