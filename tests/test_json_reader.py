@@ -4,7 +4,7 @@ import json
 import jsonschema
 import pytest
 
-from ankideck.reader import Card, _wrap_clickwords, _vocab_to_card, _grammar_to_card
+from ankideck.reader import Card, _wrap_clickwords, _vocab_to_card, _grammar_to_card, read_cards_json
 
 
 def test_sample_file_is_schema_valid():
@@ -125,3 +125,44 @@ def test_grammar_to_card_extra_examples():
     assert c.tts_examples == ["Nous sommes arrivés hier."]
     assert "{{TTS_EX_0}}" in c.back
     assert 'data-word="arrivés"' in c.back
+
+
+def _write_json(tmp_path, data, name="cards.json"):
+    p = tmp_path / name
+    p.write_text(json.dumps(data), encoding="utf-8")
+    return str(p)
+
+
+def test_read_cards_json_mixed_types(tmp_path):
+    path = _write_json(tmp_path, {
+        "chapter": "test",
+        "cards": [
+            {"type": "vocab", "front": "chat", "pos": "n.m.", "meaning_fa": "گربه"},
+            {"type": "grammar", "front": "Elle est partie.", "explanation": "..."},
+        ],
+    })
+    cards = read_cards_json(path)
+    assert len(cards) == 2
+    assert cards[0].tts_front == "chat"
+    assert cards[1].tts_front == "Elle est partie."
+
+
+def test_read_cards_json_missing_required_field_raises(tmp_path):
+    path = _write_json(tmp_path, {
+        "cards": [{"type": "vocab", "front": "chat", "meaning_fa": "گربه"}],  # missing pos
+    })
+    with pytest.raises(ValueError, match="pos"):
+        read_cards_json(path)
+
+
+def test_read_cards_json_invalid_type_raises(tmp_path):
+    path = _write_json(tmp_path, {
+        "cards": [{"type": "adjective", "front": "chat"}],
+    })
+    with pytest.raises(ValueError):
+        read_cards_json(path)
+
+
+def test_read_cards_json_empty_cards_list(tmp_path):
+    path = _write_json(tmp_path, {"cards": []})
+    assert read_cards_json(path) == []

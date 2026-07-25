@@ -320,3 +320,37 @@ def _grammar_to_card(entry: Dict) -> Card:
         tts_front=front_text,
         tts_examples=list(examples),
     )
+
+
+def read_cards_json(path) -> List[Card]:
+    """Read vocab/grammar cards from a chapter JSON file.
+
+    Validates the file against schemas/card.schema.json before building
+    any cards, raising ValueError with the failing card's location if the
+    file doesn't conform.
+    """
+    import json
+    import jsonschema
+    from jsonschema.exceptions import best_match
+
+    path = Path(path)
+    with path.open(encoding="utf-8") as f:
+        data = json.load(f)
+
+    schema_path = Path(__file__).resolve().parents[2] / "schemas" / "card.schema.json"
+    with schema_path.open(encoding="utf-8") as f:
+        schema = json.load(f)
+
+    validator = jsonschema.Draft7Validator(schema)
+    error = best_match(validator.iter_errors(data))
+    if error is not None:
+        loc = "/".join(str(p) for p in error.absolute_path)
+        raise ValueError(f"Invalid card JSON at '{loc}' in {path}: {error.message}")
+
+    cards: List[Card] = []
+    for entry in data.get("cards", []):
+        if entry["type"] == "vocab":
+            cards.append(_vocab_to_card(entry))
+        else:
+            cards.append(_grammar_to_card(entry))
+    return cards
