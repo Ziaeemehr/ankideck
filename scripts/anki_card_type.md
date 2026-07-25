@@ -396,6 +396,37 @@ Paste into the **Back Template** field:
 </script>
 ```
 
+### Styling
+
+Unlike Designs 3–4, the `.clickword` spans `read_cards_json` emits carry
+no inline `style` attribute — the dotted-underline/pointer affordance
+needs to come from the card's stylesheet instead. Paste the following
+into Anki's **Styling** field, in addition to whatever base card CSS you
+already have:
+
+```css
+.clickword {
+  cursor: pointer;
+  text-decoration: underline dotted;
+}
+.example {
+  margin-top: 8px;
+  font-style: italic;
+  color: #444;
+}
+.explanation {
+  margin-top: 8px;
+}
+```
+
+`.clickword` gives the same dotted-underline/pointer look Designs 3–4
+baked inline into every span, but now as a single shared rule. `.example`
+and `.explanation` are the block classes `read_cards_json` emits around
+example sentences and grammar explanations respectively (see
+`_example_block` and `_grammar_to_card` in `reader.py`), matching the
+italicised/spaced visual treatment the old `_build_back_html` gave the
+Excel "Example" column.
+
 ### Why this is simpler than Design 4
 
 - No line-splitting, no `EN:`/`FA:`/`[sound:...]` regex detection — the
