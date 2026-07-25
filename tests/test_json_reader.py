@@ -8,7 +8,7 @@ from ankideck.reader import Card, _wrap_clickwords, _vocab_to_card, _grammar_to_
 
 
 def test_sample_file_is_schema_valid():
-    with open("schemas/card.schema.json", encoding="utf-8") as f:
+    with open("src/ankideck/schemas/card.schema.json", encoding="utf-8") as f:
         schema = json.load(f)
     with open("samples/sample_vocabulary.json", encoding="utf-8") as f:
         data = json.load(f)

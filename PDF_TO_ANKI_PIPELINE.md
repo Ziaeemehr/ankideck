@@ -30,7 +30,7 @@ The pipeline below builds up this directory into:
   chapters.json          # split_pdf config
   chapters/               # one PDF per chapter
   chapter_images/         # one PNG per page per chapter (for extraction)
-  vocab/                  # one .json per chapter (see schemas/card.schema.json)
+  vocab/                  # one .json per chapter (see src/ankideck/schemas/card.schema.json)
   tts_cache_full/         # cached gTTS mp3s (safe to keep across reruns)
   script.py               # builds the final .apkg
   <Book>.apkg              # final output
@@ -108,7 +108,7 @@ for f in sorted(glob.glob("chapters/*.pdf")):
 ## Step 4 — Extract vocab/phrases per chapter into JSON
 
 Target format — every chapter gets `vocab/<chapter_name>.json` conforming
-to `schemas/card.schema.json` (see `samples/sample_vocabulary.json` for a
+to `src/ankideck/schemas/card.schema.json` (see `samples/sample_vocabulary.json` for a
 worked example):
 
 ```json
@@ -184,8 +184,8 @@ self-contained prompt that:
    of a vocab list).
 
 Wait for all batches to complete before moving to step 5. Spot-check a few
-of the resulting JSON files against `schemas/card.schema.json` (e.g. with
-`python -c "import json,jsonschema; jsonschema.validate(json.load(open('vocab/ch05.json')), json.load(open('schemas/card.schema.json')))"`)
+of the resulting JSON files against `src/ankideck/schemas/card.schema.json` (e.g. with
+`python -c "import json,jsonschema; jsonschema.validate(json.load(open('vocab/ch05.json')), json.load(open('src/ankideck/schemas/card.schema.json')))"`)
 before building the deck.
 
 ## Step 5 — Build the hierarchical .apkg

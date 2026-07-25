@@ -275,7 +275,7 @@ def _example_block(example_text: str, index: int) -> str:
 
 
 def _vocab_to_card(entry: Dict) -> Card:
-    """Build a Card from a schema-valid vocab entry (see schemas/card.schema.json)."""
+    """Build a Card from a schema-valid vocab entry (see src/ankideck/schemas/card.schema.json)."""
     front_text = entry["front"]
     examples = entry.get("examples", [])
 
@@ -305,7 +305,7 @@ def _vocab_to_card(entry: Dict) -> Card:
 
 
 def _grammar_to_card(entry: Dict) -> Card:
-    """Build a Card from a schema-valid grammar entry (see schemas/card.schema.json)."""
+    """Build a Card from a schema-valid grammar entry (see src/ankideck/schemas/card.schema.json)."""
     front_text = entry["front"]
     examples = entry.get("examples", [])
 
@@ -325,7 +325,7 @@ def _grammar_to_card(entry: Dict) -> Card:
 def read_cards_json(path) -> List[Card]:
     """Read vocab/grammar cards from a chapter JSON file.
 
-    Validates the file against schemas/card.schema.json before building
+    Validates the file against src/ankideck/schemas/card.schema.json before building
     any cards, raising ValueError with the failing card's location if the
     file doesn't conform.
     """
@@ -337,7 +337,7 @@ def read_cards_json(path) -> List[Card]:
     with path.open(encoding="utf-8") as f:
         data = json.load(f)
 
-    schema_path = Path(__file__).resolve().parents[2] / "schemas" / "card.schema.json"
+    schema_path = Path(__file__).resolve().parent / "schemas" / "card.schema.json"
     with schema_path.open(encoding="utf-8") as f:
         schema = json.load(f)
 
