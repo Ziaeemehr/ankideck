@@ -10,6 +10,8 @@ may contain HTML; tts_* fields are always plain text.
 """
 
 import csv
+import html
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -22,6 +24,7 @@ class Card:
     tags: List[str] = field(default_factory=list)
     tts_front: str = ""   # plain text for front audio (falls back to stripped front)
     tts_back: str = ""    # plain text for back audio (empty = no back audio)
+    tts_examples: List[str] = field(default_factory=list)  # plain French example texts (JSON cards)
 
 
 # ---------------------------------------------------------------------------
@@ -229,3 +232,27 @@ def read_cards_excel(
 
     wb.close()
     return cards
+
+
+# ---------------------------------------------------------------------------
+# JSON (dictionary-style vocab / grammar cards)
+# ---------------------------------------------------------------------------
+
+def _wrap_clickwords(text: str) -> str:
+    """Wrap each word of French text in a clickable span for the Anki template.
+
+    Punctuation is stripped from data-word (used for dictionary/conjugation
+    lookup URLs) but kept in the visible text.
+    """
+    tokens = re.split(r"(\s+)", text)
+    parts = []
+    for tok in tokens:
+        if tok.strip() == "":
+            parts.append(tok)
+            continue
+        clean = re.sub(r"[.,!?;:«»\"']", "", tok).lower()
+        parts.append(
+            f'<span class="clickword" data-word="{html.escape(clean)}">'
+            f'{html.escape(tok)}</span>'
+        )
+    return "".join(parts)
