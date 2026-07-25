@@ -88,7 +88,7 @@ def build_deck(
     return deck
 
 
-def _generate_tts(
+def generate_tts(
     cards: List[Card],
     lang: str,
     cache_dir: str,
@@ -220,7 +220,7 @@ def write_apkg(
 
     if tts_lang:
         print(f"Generating TTS audio (lang={tts_lang}) into '{tts_cache_dir}/'...")
-        all_cards, extra_media = _generate_tts(all_cards, tts_lang, tts_cache_dir)
+        all_cards, extra_media = generate_tts(all_cards, tts_lang, tts_cache_dir)
         print(f"  {len(extra_media)} audio file(s) ready.")
     else:
         all_cards = [

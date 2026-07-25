@@ -4,7 +4,7 @@ import json
 import os
 import pytest
 from ankideck.reader import Card
-from ankideck.builder import build_deck, write_apkg, _generate_tts, _strip_tts_placeholders
+from ankideck.builder import build_deck, write_apkg, generate_tts, _strip_tts_placeholders
 import ankideck.tts as tts_module
 
 
@@ -94,6 +94,24 @@ def test_strip_tts_placeholders_no_placeholders_unchanged():
     assert _strip_tts_placeholders(text) == text
 
 
+def test_generate_tts_is_public(tmp_path, monkeypatch):
+    """generate_tts (renamed from the former private _generate_tts) is a
+    public, importable, directly-callable function."""
+    def fake_make_tts(sentences, filename, cache_dir, lang="fr"):
+        out_path = os.path.join(cache_dir, filename)
+        with open(out_path, "wb") as f:
+            f.write(b"fake-audio")
+        return out_path
+
+    monkeypatch.setattr(tts_module, "make_tts", fake_make_tts)
+
+    card = Card(front="chien", back="", tts_front="chien")
+    updated, media = generate_tts([card], "fr", str(tmp_path))
+    assert len(updated) == 1
+    assert "[sound:tts_front_0000.mp3]" in updated[0].front
+    assert len(media) == 1
+
+
 def test_generate_tts_fills_example_placeholders(tmp_path, monkeypatch):
     calls = []
 
@@ -115,7 +133,7 @@ def test_generate_tts_fills_example_placeholders(tmp_path, monkeypatch):
         tts_front="chat",
         tts_examples=["Le chat dort.", "Il joue."],
     )
-    updated, media = _generate_tts([card], "fr", str(tmp_path))
+    updated, media = generate_tts([card], "fr", str(tmp_path))
 
     assert "{{TTS_EX_0}}" not in updated[0].back
     assert "{{TTS_EX_1}}" not in updated[0].back

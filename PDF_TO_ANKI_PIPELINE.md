@@ -214,20 +214,29 @@ for a working example). The key pieces:
 - `read_cards_json(...)` from `ankideck.reader` reads each chapter's
   `vocab/<chapter>.json`, building one `Card` per entry (vocab or
   grammar). Front content and every French example already carry
-  `.clickword` markup and TTS placeholders — no extra reader arguments
-  needed, unlike the old xlsx column-mapping.
+  `.clickword` markup and `{{TTS_EX_i}}` placeholders — no extra reader
+  arguments needed, unlike the old xlsx column-mapping.
 
   (Older decks/scripts using the legacy `vocab/<chapter>.xlsx` format can
   still call `read_cards_excel(...)` exactly as before — it's unchanged.)
-- `make_tts(...)` from `ankideck.tts` generates/caches gTTS mp3s
-  (`lang="fr"`) for both the French front and the French example on the
-  back.
+- `generate_tts(cards, lang="fr", cache_dir="tts_cache_full")` from
+  `ankideck.builder` — call this on each chapter's cards **before**
+  building that chapter's `genanki.Deck`. It generates/caches gTTS mp3s
+  for the French front and for every French example sentence (any number
+  per card, not just one), filling in each card's `{{TTS_EX_i}}`
+  placeholder with the matching `[sound:...]` tag, and returns
+  `(updated_cards, media_files)` — build the chapter's deck from
+  `updated_cards`, and keep `media_files` (don't call `make_tts(...)`
+  directly per chapter; that bypasses the placeholder-filling logic and
+  leaves raw `{{TTS_EX_i}}` text in the cards).
 - `genanki.Deck` per chapter, named `f"{PARENT}::{title}"` — the `::`
   separator is what makes Anki treat it as a subdeck of `PARENT`.
 - A stable numeric deck id derived from `md5(deck_name)` so re-running the
   script doesn't create duplicate decks in Anki.
-- One `genanki.Package(all_decks)` at the end, with all subdecks bundled and
-  all generated media attached, written to a single `.apkg`.
+- One `genanki.Package(all_decks)` at the end, with all subdecks bundled
+  and **every chapter's `media_files` from `generate_tts` collected and
+  combined** into `genanki.Package(...).media_files`, written to a single
+  `.apkg`.
 
 Run it:
 
