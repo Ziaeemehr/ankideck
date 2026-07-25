@@ -30,7 +30,7 @@ The pipeline below builds up this directory into:
   chapters.json          # split_pdf config
   chapters/               # one PDF per chapter
   chapter_images/         # one PNG per page per chapter (for extraction)
-  vocab/                  # one .xlsx per chapter (French/English/Persian/Example)
+  vocab/                  # one .json per chapter (see schemas/card.schema.json)
   tts_cache_full/         # cached gTTS mp3s (safe to keep across reruns)
   script.py               # builds the final .apkg
   <Book>.apkg              # final output
@@ -105,28 +105,72 @@ for f in sorted(glob.glob("chapters/*.pdf")):
 170dpi is a good balance of legibility vs. image size for reading French text
 (including accents) in tables.
 
-## Step 4 — Extract vocab/phrases per chapter into xlsx
+## Step 4 — Extract vocab/phrases per chapter into JSON
 
-Target format — every chapter gets `vocab/<chapter_name>.xlsx` with a header
-row and one row per flashcard:
+Target format — every chapter gets `vocab/<chapter_name>.json` conforming
+to `schemas/card.schema.json` (see `samples/sample_vocabulary.json` for a
+worked example):
 
-| French | English | Persian | Example |
-|---|---|---|---|
-| une cravate | a tie | کراوات | Il porte une cravate rouge pour aller au bureau. |
+```json
+{
+  "chapter": "<chapter_name>",
+  "cards": [
+    {
+      "type": "vocab",
+      "front": "une cravate",
+      "pos": "n.f.",
+      "meaning_fa": "کراوات",
+      "meaning_en": "a tie",
+      "synonyms": [],
+      "antonyms": [],
+      "examples": ["Il porte une cravate rouge pour aller au bureau."],
+      "tags": ["<chapter_name>"]
+    }
+  ]
+}
+```
 
 Conventions:
-- **French**: the term/phrase as the book shows it (keep the article on
+- **`front`**: the term/phrase as the book shows it (keep the article on
   nouns, e.g. `une cravate`; verbs in infinitive unless it's a fixed
   expression like `avoir faim`).
-- **English** / **Persian**: concise, accurate translations.
-- **Example**: one natural French sentence using the term — reuse/adapt a
-  sentence actually seen in the book (dialogue or explanation) when
-  possible, otherwise write a short original A1/A2-appropriate sentence.
-- Skip pure grammar filler (bare articles/pronouns); keep nouns, adjectives,
-  verbs, and useful fixed expressions.
-- 15-30 items per chapter is typical. Review/"Bilan" chapters usually have no
-  dedicated vocabulary list — pull useful words/expressions out of the
+- **`pos`**: short abbreviation — `n.m.`, `n.f.`, `adj`, `adv`, `v`,
+  `prep`, `conj`, `pron`, or `expr` for fixed expressions/idioms.
+- **`meaning_fa`** / **`meaning_en`**: concise, accurate translations of
+  the front term. `meaning_fa` is required; `meaning_en` is optional.
+- **`synonyms`** / **`antonyms`**: optional lists of related French
+  words/phrases — omit or leave empty if none apply.
+- **`examples`**: a list of natural French sentences using the term —
+  reuse/adapt sentences actually seen in the book (dialogue or
+  explanation) when possible, otherwise write short original A1/A2
+  sentences. Include more than one when the book gives more than one
+  usage worth capturing (e.g. different senses of a verb) — unlike the
+  old xlsx format, there's no fixed limit.
+- Skip pure grammar filler (bare articles/pronouns); keep nouns,
+  adjectives, verbs, and useful fixed expressions.
+- 15-30 items per chapter is typical. Review/"Bilan" chapters usually have
+  no dedicated vocabulary list — pull useful words/expressions out of the
   exercise questions and answer choices instead.
+
+**Grammar-rule cards**: when a chapter explains a grammar point worth its
+own card (e.g. "passé composé with être"), add a `type: "grammar"` entry
+instead of `vocab`:
+
+```json
+{
+  "type": "grammar",
+  "front": "Elle est partie tôt.",
+  "explanation": "Les verbes de mouvement (aller, partir, sortir...) se conjuguent avec être au passé composé; le participe s'accorde avec le sujet.",
+  "examples": ["Nous sommes arrivés hier."],
+  "tags": ["<chapter_name>", "grammar"]
+}
+```
+
+`front` is one French example sentence illustrating the rule (this is
+what gets spoken + made clickable, same as a vocab word's front).
+`explanation` is prose (English, optionally mixing in Persian) — plain
+text, not clickable or voiced. `examples` (optional) adds further
+illustrating sentences beyond the front one.
 
 Because this step requires viewing dozens/hundreds of page images and is
 naturally parallelizable across chapters, **use several background Agent
@@ -134,14 +178,15 @@ naturally parallelizable across chapters, **use several background Agent
 self-contained prompt that:
 1. Lists that batch's chapter folders (and page counts) under
    `chapter_images/`.
-2. States the exact output path and xlsx schema (header row above), and
-   gives a working `openpyxl` snippet to write it.
-3. Notes any Bilan-chapter special-casing (extract from exercises instead of
-   a vocab list).
+2. States the exact output path and JSON schema (above), and gives a
+   worked example (`samples/sample_vocabulary.json`) to follow.
+3. Notes any Bilan-chapter special-casing (extract from exercises instead
+   of a vocab list).
 
 Wait for all batches to complete before moving to step 5. Spot-check a few
-of the resulting xlsx files (row counts, spelling, no leftover placeholder
-text) before building the deck.
+of the resulting JSON files against `schemas/card.schema.json` (e.g. with
+`python -c "import json,jsonschema; jsonschema.validate(json.load(open('vocab/ch05.json')), json.load(open('schemas/card.schema.json')))"`)
+before building the deck.
 
 ## Step 5 — Build the hierarchical .apkg
 
@@ -166,10 +211,14 @@ for a working example). The key pieces:
   ("06_Bilan_1",  "05.5 Bilan 1"),
   ("07_Ch06_...", "06 L'apparence physique"),
   ```
-- `read_cards_excel(...)` from `ankideck.reader` reads each xlsx with
-  `front_col="French"`, `back_cols=["English", "Persian", "Example"]`,
-  `tts_back_col="Example"` (the example sentence gets spoken + styled
-  differently on the back).
+- `read_cards_json(...)` from `ankideck.reader` reads each chapter's
+  `vocab/<chapter>.json`, building one `Card` per entry (vocab or
+  grammar). Front content and every French example already carry
+  `.clickword` markup and TTS placeholders — no extra reader arguments
+  needed, unlike the old xlsx column-mapping.
+
+  (Older decks/scripts using the legacy `vocab/<chapter>.xlsx` format can
+  still call `read_cards_excel(...)` exactly as before — it's unchanged.)
 - `make_tts(...)` from `ankideck.tts` generates/caches gTTS mp3s
   (`lang="fr"`) for both the French front and the French example on the
   back.
