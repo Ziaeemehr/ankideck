@@ -3,7 +3,8 @@
 import os
 import pytest
 from ankideck.reader import Card
-from ankideck.builder import build_deck, write_apkg
+from ankideck.builder import build_deck, write_apkg, _generate_tts, _strip_tts_placeholders
+import ankideck.tts as tts_module
 
 
 def _cards(*pairs):
@@ -76,4 +77,58 @@ def test_write_apkg_empty_cards(tmp_path):
     out = str(tmp_path / "empty.apkg")
     n = write_apkg("Empty", [], out)
     assert n == 0
+    assert os.path.exists(out)
+
+
+def test_strip_tts_placeholders_removes_all():
+    text = '<div class="example">Le chat dort. {{TTS_EX_0}}</div><div class="example">Il joue. {{TTS_EX_1}}</div>'
+    result = _strip_tts_placeholders(text)
+    assert "{{TTS_EX_0}}" not in result
+    assert "{{TTS_EX_1}}" not in result
+    assert "Le chat dort." in result
+
+
+def test_strip_tts_placeholders_no_placeholders_unchanged():
+    text = "<div>plain text</div>"
+    assert _strip_tts_placeholders(text) == text
+
+
+def test_generate_tts_fills_example_placeholders(tmp_path, monkeypatch):
+    calls = []
+
+    def fake_make_tts(sentences, filename, cache_dir, lang="fr"):
+        calls.append(filename)
+        out_path = os.path.join(cache_dir, filename)
+        with open(out_path, "wb") as f:
+            f.write(b"fake-audio")
+        return out_path
+
+    monkeypatch.setattr(tts_module, "make_tts", fake_make_tts)
+
+    card = Card(
+        front="chat",
+        back=(
+            '<div class="example">Le chat dort. {{TTS_EX_0}}</div>'
+            '<div class="example">Il joue. {{TTS_EX_1}}</div>'
+        ),
+        tts_front="chat",
+        tts_examples=["Le chat dort.", "Il joue."],
+    )
+    updated, media = _generate_tts([card], "fr", str(tmp_path))
+
+    assert "{{TTS_EX_0}}" not in updated[0].back
+    assert "{{TTS_EX_1}}" not in updated[0].back
+    assert "[sound:tts_ex_0000_00.mp3]" in updated[0].back
+    assert "[sound:tts_ex_0000_01.mp3]" in updated[0].back
+    assert len(media) == 3  # 1 front + 2 examples
+
+
+def test_write_apkg_strips_placeholders_without_tts(tmp_path):
+    cards = [Card(
+        front="chat",
+        back='<div class="example">Le chat dort. {{TTS_EX_0}}</div>',
+        tts_examples=["Le chat dort."],
+    )]
+    out = str(tmp_path / "test.apkg")
+    write_apkg("Test", cards, out)  # no tts_lang passed
     assert os.path.exists(out)

@@ -63,6 +63,11 @@ def _stable_guid(front: str) -> str:
     return genanki.guid_for(key)
 
 
+def _strip_tts_placeholders(text: str) -> str:
+    """Remove leftover {{TTS_EX_i}} markers when no TTS run has filled them in."""
+    return re.sub(r"\{\{TTS_EX_\d+\}\}", "", text)
+
+
 def build_deck(
     deck_name: str,
     cards: List[Card],
@@ -141,7 +146,7 @@ def _generate_tts(
                 media_files.append(path)
                 new_front = card.front + f"<br>[sound:{fname}]"
 
-        # --- back audio (example sentence) ---
+        # --- back audio (single legacy example sentence, xlsx cards) ---
         if back_text.strip():
             fname = f"tts_back_{i:04d}.mp3"
             bar.set_postfix_str(f"example: {back_text[:20]}", refresh=False)
@@ -150,12 +155,28 @@ def _generate_tts(
                 media_files.append(path)
                 new_back = card.back + f"<br>[sound:{fname}]"
 
+        # --- per-example audio (JSON cards: 0..N examples) ---
+        for j, example_text in enumerate(card.tts_examples):
+            placeholder = f"{{{{TTS_EX_{j}}}}}"
+            if not example_text.strip():
+                new_back = new_back.replace(placeholder, "")
+                continue
+            fname = f"tts_ex_{i:04d}_{j:02d}.mp3"
+            bar.set_postfix_str(f"example {j}: {example_text[:20]}", refresh=False)
+            path = make_tts([example_text], fname, cache_dir, lang=lang)
+            if path:
+                media_files.append(path)
+                new_back = new_back.replace(placeholder, f"[sound:{fname}]")
+            else:
+                new_back = new_back.replace(placeholder, "")
+
         updated.append(Card(
             front=new_front,
             back=new_back,
             tags=card.tags,
             tts_front=card.tts_front,
             tts_back=card.tts_back,
+            tts_examples=card.tts_examples,
         ))
 
     return updated, media_files
@@ -201,6 +222,18 @@ def write_apkg(
         print(f"Generating TTS audio (lang={tts_lang}) into '{tts_cache_dir}/'...")
         all_cards, extra_media = _generate_tts(all_cards, tts_lang, tts_cache_dir)
         print(f"  {len(extra_media)} audio file(s) ready.")
+    else:
+        all_cards = [
+            Card(
+                front=c.front,
+                back=_strip_tts_placeholders(c.back),
+                tags=c.tags,
+                tts_front=c.tts_front,
+                tts_back=c.tts_back,
+                tts_examples=c.tts_examples,
+            )
+            for c in all_cards
+        ]
 
     print(f"Building deck '{deck_name}' ({len(all_cards)} cards)...")
     deck = build_deck(deck_name, all_cards)
