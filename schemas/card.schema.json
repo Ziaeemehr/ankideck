@@ -1,0 +1,50 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Ankideck chapter card list",
+  "type": "object",
+  "required": ["cards"],
+  "properties": {
+    "chapter": {"type": "string"},
+    "cards": {
+      "type": "array",
+      "items": {"$ref": "#/definitions/card"}
+    }
+  },
+  "definitions": {
+    "card": {
+      "type": "object",
+      "required": ["type", "front"],
+      "properties": {
+        "type": {"enum": ["vocab", "grammar"]},
+        "front": {"type": "string", "minLength": 1},
+        "tags": {"type": "array", "items": {"type": "string"}}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"type": {"const": "vocab"}}},
+          "then": {
+            "required": ["pos", "meaning_fa"],
+            "properties": {
+              "pos": {"type": "string", "minLength": 1},
+              "meaning_fa": {"type": "string", "minLength": 1},
+              "meaning_en": {"type": "string"},
+              "synonyms": {"type": "array", "items": {"type": "string"}},
+              "antonyms": {"type": "array", "items": {"type": "string"}},
+              "examples": {"type": "array", "items": {"type": "string"}}
+            }
+          }
+        },
+        {
+          "if": {"properties": {"type": {"const": "grammar"}}},
+          "then": {
+            "required": ["explanation"],
+            "properties": {
+              "explanation": {"type": "string", "minLength": 1},
+              "examples": {"type": "array", "items": {"type": "string"}}
+            }
+          }
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "chapter": "05_Ch05_Les_vetements",
+  "cards": [
+    {
+      "type": "vocab",
+      "front": "une cravate",
+      "pos": "n.f.",
+      "meaning_fa": "کراوات",
+      "meaning_en": "a tie",
+      "synonyms": ["une écharpe"],
+      "antonyms": [],
+      "examples": ["Il porte une cravate rouge pour aller au bureau."],
+      "tags": ["ch05"]
+    },
+    {
+      "type": "grammar",
+      "front": "Elle est partie tôt.",
+      "explanation": "Les verbes de mouvement (aller, partir, sortir...) se conjuguent avec être au passé composé; le participe s'accorde avec le sujet.",
+      "examples": ["Nous sommes arrivés hier."],
+      "tags": ["ch18", "grammar"]
+    }
+  ]
+}
