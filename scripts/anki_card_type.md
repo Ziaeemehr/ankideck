@@ -170,7 +170,12 @@ Paste into the **Back Template** field:
 
 ---
 
-## 4. Clickable-word popup — only on the French example line of Back
+## 4. Clickable-word popup — only on the French example line of Back (legacy, xlsx decks)
+
+**Legacy**: this template's line-sniffing (`EN:`/`FA:`/`[sound:...]` prefix
+detection) only works for the single-example xlsx pipeline's Back field
+shape. Decks built from `read_cards_json` (see Design 5 below) don't need
+this — use Design 5 for those instead.
 
 The `Back` field is formatted, e.g.:
 
@@ -308,3 +313,98 @@ literal `[sound:...]` syntax, adjust the regexes at the top of the `forEach`
 loop accordingly. If a note ever has **no** sound tag and **no** blank line
 separating fields, this still works since it filters by content, not
 position.
+
+---
+
+## 5. Clickable-word popup — schema-driven (JSON-built decks)
+
+For decks built from `read_cards_json` (vocab and grammar cards), the
+`.clickword` spans are already baked into the `Front`/`Back` field HTML by
+the Python reader (`ankideck.reader._wrap_clickwords`) — every French word
+in the front, in each example, and in synonyms/antonyms is wrapped as:
+
+```html
+<span class="clickword" data-word="chat">chat</span>
+```
+
+Non-French text (meanings, POS label, grammar explanation) is never
+wrapped, so the template doesn't need to detect or skip anything by
+content — it just attaches the popup handler to whatever `.clickword`
+elements exist, front or back, however many there are.
+
+Paste into the **Back Template** field:
+
+```html
+{{FrontSide}}
+<hr id="answer">
+{{Back}}
+
+<!-- Floating popup menu (hidden until a word is clicked) -->
+<div id="word-menu" style="
+    display:none; position:fixed; z-index:9999;
+    background:#fff; border:1px solid #ccc; border-radius:8px;
+    box-shadow:0 4px 12px rgba(0,0,0,0.2); padding:8px; min-width:175px;">
+  <div id="menu-label" style="
+      font-weight:bold; font-size:13px; color:#555;
+      margin-bottom:6px; text-align:center; border-bottom:1px solid #eee; padding-bottom:4px;">
+  </div>
+  <button onclick="openReverso()" style="
+      display:block; width:100%; margin:3px 0; padding:6px 10px;
+      background:#2b6cb0; color:#fff; border:none; border-radius:5px;
+      font-size:13px; cursor:pointer;">
+    Conjugate — Reverso
+  </button>
+  <button onclick="openDict()" style="
+      display:block; width:100%; margin:3px 0; padding:6px 10px;
+      background:#276749; color:#fff; border:none; border-radius:5px;
+      font-size:13px; cursor:pointer;">
+    Dictionary — WordReference
+  </button>
+</div>
+
+<script>
+(function() {
+  var currentWord = "";
+  var menu = document.getElementById("word-menu");
+
+  document.addEventListener("click", function(e) {
+    var span = e.target.closest ? e.target.closest(".clickword") : null;
+    if (!span) {
+      menu.style.display = "none";
+      return;
+    }
+    e.stopPropagation();
+    currentWord = span.dataset.word;
+    document.getElementById("menu-label").innerText = currentWord;
+    menu.style.display = "block";
+    var x = Math.min(e.clientX, window.innerWidth - 195);
+    var y = e.clientY + 14;
+    menu.style.left = x + "px";
+    menu.style.top = y + "px";
+  });
+
+  window.openReverso = function() {
+    window.open("https://conjugator.reverso.net/conjugation-french-verb-" + currentWord + ".html", "_blank");
+    menu.style.display = "none";
+  };
+
+  window.openDict = function() {
+    window.open("https://www.wordreference.com/fren/" + currentWord, "_blank");
+    menu.style.display = "none";
+  };
+})();
+</script>
+```
+
+### Why this is simpler than Design 4
+
+- No line-splitting, no `EN:`/`FA:`/`[sound:...]` regex detection — the
+  reader already knows which spans are French at build time, so the
+  template only needs one `querySelector`-style click delegation, shared
+  by front and back.
+- Works unchanged for vocab cards (front word + synonyms + antonyms +
+  N examples) and grammar cards (front example + optional N extra
+  examples) — the explanation/meaning text simply has no `.clickword`
+  spans to match, so it's naturally skipped.
+- Adding a second, third, or tenth example to a card requires no template
+  change — same spans, same delegated handler.
