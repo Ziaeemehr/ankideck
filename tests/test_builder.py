@@ -1,5 +1,6 @@
 """Tests for ankideck.builder."""
 
+import json
 import os
 import pytest
 from ankideck.reader import Card
@@ -132,3 +133,17 @@ def test_write_apkg_strips_placeholders_without_tts(tmp_path):
     out = str(tmp_path / "test.apkg")
     write_apkg("Test", cards, out)  # no tts_lang passed
     assert os.path.exists(out)
+
+
+def test_cli_reads_json_input(tmp_path):
+    from ankideck.builder import main as builder_main
+
+    json_path = tmp_path / "cards.json"
+    json_path.write_text(json.dumps({
+        "cards": [{"type": "vocab", "front": "chat", "pos": "n.m.", "meaning_fa": "گربه"}],
+    }), encoding="utf-8")
+    out_path = tmp_path / "out.apkg"
+
+    builder_main([str(json_path), "--deck", "Test", "-o", str(out_path)])
+
+    assert out_path.exists()

@@ -281,6 +281,9 @@ Examples:
                 front_col=args.front_col,
                 tts_back_col=args.tts_back_col if args.tts else None,
             )
+        elif ext == ".json":
+            from ankideck.reader import read_cards_json
+            batch = read_cards_json(f)
         else:
             has_header = False if args.no_header else None
             batch = read_cards(f, delimiter=args.delimiter, has_header=has_header)
