@@ -4,7 +4,7 @@ import json
 import jsonschema
 import pytest
 
-from ankideck.reader import Card, _wrap_clickwords
+from ankideck.reader import Card, _wrap_clickwords, _vocab_to_card, _grammar_to_card
 
 
 def test_sample_file_is_schema_valid():
@@ -47,3 +47,81 @@ def test_wrap_clickwords_preserves_hyphens():
 def test_wrap_clickwords_preserves_whitespace_between_words():
     html = _wrap_clickwords("Le chat")
     assert "</span> <span" in html
+
+
+def test_vocab_to_card_basic_fields():
+    entry = {
+        "type": "vocab",
+        "front": "chat",
+        "pos": "n.m.",
+        "meaning_fa": "گربه",
+        "meaning_en": "cat",
+        "tags": ["ch01"],
+    }
+    c = _vocab_to_card(entry)
+    assert 'class="clickword"' in c.front
+    assert 'data-word="chat"' in c.front
+    assert c.tts_front == "chat"
+    assert "n.m." in c.back
+    assert "گربه" in c.back
+    assert "cat" in c.back
+    assert c.tags == ["ch01"]
+    assert c.tts_examples == []
+
+
+def test_vocab_to_card_omits_optional_meaning_en_when_absent():
+    entry = {"type": "vocab", "front": "chat", "pos": "n.m.", "meaning_fa": "گربه"}
+    c = _vocab_to_card(entry)
+    assert "EN:" not in c.back
+
+
+def test_vocab_to_card_synonyms_antonyms_clickable_no_tts():
+    entry = {
+        "type": "vocab", "front": "chat", "pos": "n.m.", "meaning_fa": "گربه",
+        "synonyms": ["matou"], "antonyms": ["chien"],
+    }
+    c = _vocab_to_card(entry)
+    assert 'data-word="matou"' in c.back
+    assert 'data-word="chien"' in c.back
+    assert c.tts_examples == []  # synonyms/antonyms never get audio
+
+
+def test_vocab_to_card_multiple_examples_produce_ordered_placeholders():
+    entry = {
+        "type": "vocab", "front": "chat", "pos": "n.m.", "meaning_fa": "گربه",
+        "examples": ["Le chat dort.", "Le chat joue."],
+    }
+    c = _vocab_to_card(entry)
+    assert c.tts_examples == ["Le chat dort.", "Le chat joue."]
+    assert "{{TTS_EX_0}}" in c.back
+    assert "{{TTS_EX_1}}" in c.back
+    assert c.back.index("{{TTS_EX_0}}") < c.back.index("{{TTS_EX_1}}")
+    assert 'data-word="dort"' in c.back
+
+
+def test_grammar_to_card_basic():
+    entry = {
+        "type": "grammar",
+        "front": "Elle est partie tôt.",
+        "explanation": "Verbes de mouvement -> être.",
+        "tags": ["ch18"],
+    }
+    c = _grammar_to_card(entry)
+    assert 'class="clickword"' in c.front
+    assert c.tts_front == "Elle est partie tôt."
+    assert "Verbes de mouvement" in c.back
+    assert 'class="clickword"' not in c.back.split("</div>")[0]  # explanation not clickable
+    assert c.tts_examples == []
+
+
+def test_grammar_to_card_extra_examples():
+    entry = {
+        "type": "grammar",
+        "front": "Elle est partie tôt.",
+        "explanation": "Verbes de mouvement -> être.",
+        "examples": ["Nous sommes arrivés hier."],
+    }
+    c = _grammar_to_card(entry)
+    assert c.tts_examples == ["Nous sommes arrivés hier."]
+    assert "{{TTS_EX_0}}" in c.back
+    assert 'data-word="arrivés"' in c.back

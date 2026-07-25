@@ -256,3 +256,67 @@ def _wrap_clickwords(text: str) -> str:
             f'{html.escape(tok)}</span>'
         )
     return "".join(parts)
+
+
+def _meta_line(label: str, value: str) -> str:
+    return f"<div><b>{html.escape(label)}:</b> {html.escape(value)}</div>"
+
+
+def _wordlist_line(label: str, words: List[str]) -> str:
+    spans = ", ".join(_wrap_clickwords(w) for w in words)
+    return f'<div><b>{html.escape(label)}:</b> {spans}</div>'
+
+
+def _example_block(example_text: str, index: int) -> str:
+    return (
+        f'<div class="example">{_wrap_clickwords(example_text)} '
+        f"{{{{TTS_EX_{index}}}}}</div>"
+    )
+
+
+def _vocab_to_card(entry: Dict) -> Card:
+    """Build a Card from a schema-valid vocab entry (see schemas/card.schema.json)."""
+    front_text = entry["front"]
+    examples = entry.get("examples", [])
+
+    back_parts = [
+        _meta_line("POS", entry["pos"]),
+        _meta_line("FA", entry["meaning_fa"]),
+    ]
+    meaning_en = entry.get("meaning_en", "")
+    if meaning_en:
+        back_parts.append(_meta_line("EN", meaning_en))
+    synonyms = entry.get("synonyms", [])
+    if synonyms:
+        back_parts.append(_wordlist_line("Syn", synonyms))
+    antonyms = entry.get("antonyms", [])
+    if antonyms:
+        back_parts.append(_wordlist_line("Ant", antonyms))
+    for i, ex in enumerate(examples):
+        back_parts.append(_example_block(ex, i))
+
+    return Card(
+        front=_wrap_clickwords(front_text),
+        back="\n".join(back_parts),
+        tags=list(entry.get("tags", [])),
+        tts_front=front_text,
+        tts_examples=list(examples),
+    )
+
+
+def _grammar_to_card(entry: Dict) -> Card:
+    """Build a Card from a schema-valid grammar entry (see schemas/card.schema.json)."""
+    front_text = entry["front"]
+    examples = entry.get("examples", [])
+
+    back_parts = [f'<div class="explanation">{html.escape(entry["explanation"])}</div>']
+    for i, ex in enumerate(examples):
+        back_parts.append(_example_block(ex, i))
+
+    return Card(
+        front=_wrap_clickwords(front_text),
+        back="\n".join(back_parts),
+        tags=list(entry.get("tags", [])),
+        tts_front=front_text,
+        tts_examples=list(examples),
+    )
