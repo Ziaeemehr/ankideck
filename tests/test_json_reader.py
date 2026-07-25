@@ -20,6 +20,11 @@ def test_card_tts_examples_defaults_empty():
     assert c.tts_examples == []
 
 
+def test_card_note_type_defaults_basic():
+    c = Card(front="a", back="b")
+    assert c.note_type == "basic"
+
+
 def test_card_tts_examples_independent_per_instance():
     a = Card(front="a", back="b")
     b = Card(front="c", back="d")
@@ -145,6 +150,8 @@ def test_read_cards_json_mixed_types(tmp_path):
     assert len(cards) == 2
     assert cards[0].tts_front == "chat"
     assert cards[1].tts_front == "Elle est partie."
+    assert cards[0].note_type == "json"
+    assert cards[1].note_type == "json"
 
 
 def test_read_cards_json_missing_required_field_raises(tmp_path):

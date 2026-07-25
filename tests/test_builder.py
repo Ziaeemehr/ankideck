@@ -4,7 +4,10 @@ import json
 import os
 import pytest
 from ankideck.reader import Card
-from ankideck.builder import build_deck, write_apkg, generate_tts, _strip_tts_placeholders
+from ankideck.builder import (
+    build_deck, write_apkg, generate_tts, _strip_tts_placeholders,
+    BASIC_MODEL, JSON_MODEL,
+)
 import ankideck.tts as tts_module
 
 
@@ -32,6 +35,45 @@ def test_build_deck_tags():
     deck = build_deck("T", cards)
     assert "french" in deck.notes[0].tags
     assert "a1" in deck.notes[0].tags
+
+
+def test_build_deck_default_note_type_uses_basic_model():
+    cards = _cards(("a", "1"))
+    deck = build_deck("T", cards)
+    assert deck.notes[0].model.name == "Basic"
+
+
+def test_build_deck_json_note_type_uses_basicjson_model():
+    cards = [Card(front="chat", back="gato", note_type="json")]
+    deck = build_deck("T", cards)
+    assert deck.notes[0].model.name == "BasicJson"
+
+
+def test_build_deck_mixed_note_types_in_one_deck():
+    cards = [
+        Card(front="a", back="1"),
+        Card(front="b", back="2", note_type="json"),
+    ]
+    deck = build_deck("T", cards)
+    assert deck.notes[0].model.name == "Basic"
+    assert deck.notes[1].model.name == "BasicJson"
+
+
+def test_json_model_has_clickword_css():
+    assert ".clickword" in JSON_MODEL.css
+    assert "cursor: pointer" in JSON_MODEL.css
+
+
+def test_json_model_template_has_popup_script():
+    afmt = JSON_MODEL.templates[0]["afmt"]
+    assert "clickword" in afmt
+    assert "openReverso" in afmt
+    assert "openDict" in afmt
+
+
+def test_basic_model_unchanged_by_json_model_addition():
+    assert BASIC_MODEL.name == "Basic"
+    assert ".clickword" not in BASIC_MODEL.css
 
 
 def test_write_apkg_creates_file(tmp_path):
@@ -142,6 +184,20 @@ def test_generate_tts_fills_example_placeholders(tmp_path, monkeypatch):
     assert len(media) == 3  # 1 front + 2 examples
 
 
+def test_generate_tts_preserves_note_type(tmp_path, monkeypatch):
+    def fake_make_tts(sentences, filename, cache_dir, lang="fr"):
+        out_path = os.path.join(cache_dir, filename)
+        with open(out_path, "wb") as f:
+            f.write(b"fake-audio")
+        return out_path
+
+    monkeypatch.setattr(tts_module, "make_tts", fake_make_tts)
+
+    card = Card(front="chat", back="1", tts_front="chat", note_type="json")
+    updated, _ = generate_tts([card], "fr", str(tmp_path))
+    assert updated[0].note_type == "json"
+
+
 def test_write_apkg_strips_placeholders_without_tts(tmp_path):
     cards = [Card(
         front="chat",
@@ -151,6 +207,44 @@ def test_write_apkg_strips_placeholders_without_tts(tmp_path):
     out = str(tmp_path / "test.apkg")
     write_apkg("Test", cards, out)  # no tts_lang passed
     assert os.path.exists(out)
+
+
+def _note_model_ids(apkg_path):
+    """Extract (note_flds, model_id) pairs from a built .apkg's collection."""
+    import sqlite3
+    import zipfile
+
+    with zipfile.ZipFile(apkg_path) as zf:
+        db_name = "collection.anki2" if "collection.anki2" in zf.namelist() else "collection.anki21"
+        with zf.open(db_name) as db_file:
+            data = db_file.read()
+    tmp_db = os.path.join(os.path.dirname(apkg_path), "_extracted.anki2")
+    with open(tmp_db, "wb") as f:
+        f.write(data)
+    conn = sqlite3.connect(tmp_db)
+    try:
+        rows = conn.execute("SELECT flds, mid FROM notes").fetchall()
+    finally:
+        conn.close()
+    return rows
+
+
+def test_write_apkg_json_note_type_uses_basicjson_model_without_tts(tmp_path):
+    cards = [Card(front="chat", back="1", note_type="json")]
+    out = str(tmp_path / "test.apkg")
+    write_apkg("Test", cards, out)  # no tts_lang passed
+    rows = _note_model_ids(out)
+    assert len(rows) == 1
+    assert rows[0][1] == JSON_MODEL.id
+
+
+def test_write_apkg_basic_note_type_uses_basic_model_without_tts(tmp_path):
+    cards = [Card(front="chat", back="1")]
+    out = str(tmp_path / "test.apkg")
+    write_apkg("Test", cards, out)  # no tts_lang passed
+    rows = _note_model_ids(out)
+    assert len(rows) == 1
+    assert rows[0][1] == BASIC_MODEL.id
 
 
 def test_cli_reads_json_input(tmp_path):

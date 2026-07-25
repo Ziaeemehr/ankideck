@@ -25,6 +25,8 @@ class Card:
     tts_front: str = ""   # plain text for front audio (falls back to stripped front)
     tts_back: str = ""    # plain text for back audio (empty = no back audio)
     tts_examples: List[str] = field(default_factory=list)  # plain French example texts (JSON cards)
+    note_type: str = "basic"  # "basic" (xlsx/text) or "json" -> selects the genanki Model in builder.py
+    note_type: str = "basic"  # "basic" (xlsx/text) or "json" -> selects the genanki Model in builder.py
 
 
 # ---------------------------------------------------------------------------
@@ -301,6 +303,7 @@ def _vocab_to_card(entry: Dict) -> Card:
         tags=list(entry.get("tags", [])),
         tts_front=front_text,
         tts_examples=list(examples),
+        note_type="json",
     )
 
 
@@ -319,6 +322,7 @@ def _grammar_to_card(entry: Dict) -> Card:
         tags=list(entry.get("tags", [])),
         tts_front=front_text,
         tts_examples=list(examples),
+        note_type="json",
     )
 
 

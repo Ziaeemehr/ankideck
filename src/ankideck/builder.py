@@ -46,6 +46,88 @@ BASIC_MODEL = genanki.Model(
     ),
 )
 
+# Bakes in the "Design 5" clickable-word popup template (see
+# scripts/anki_card_type.md) so JSON-built decks (read_cards_json) get
+# working click-to-lookup behavior on import, with no manual Note Type
+# editing required. Used for cards whose Card.note_type == "json".
+JSON_MODEL = genanki.Model(
+    1957302846,
+    "BasicJson",
+    fields=[{"name": "Front"}, {"name": "Back"}],
+    templates=[
+        {
+            "name": "Card 1",
+            "qfmt": "{{Front}}",
+            "afmt": '''{{FrontSide}}
+<hr id="answer">
+{{Back}}
+
+<!-- Floating popup menu (hidden until a word is clicked) -->
+<div id="word-menu" style="
+    display:none; position:fixed; z-index:9999;
+    background:#fff; border:1px solid #ccc; border-radius:8px;
+    box-shadow:0 4px 12px rgba(0,0,0,0.2); padding:8px; min-width:175px;">
+  <div id="menu-label" style="
+      font-weight:bold; font-size:13px; color:#555;
+      margin-bottom:6px; text-align:center; border-bottom:1px solid #eee; padding-bottom:4px;">
+  </div>
+  <button onclick="openReverso()" style="
+      display:block; width:100%; margin:3px 0; padding:6px 10px;
+      background:#2b6cb0; color:#fff; border:none; border-radius:5px;
+      font-size:13px; cursor:pointer;">
+    Conjugate — Reverso
+  </button>
+  <button onclick="openDict()" style="
+      display:block; width:100%; margin:3px 0; padding:6px 10px;
+      background:#276749; color:#fff; border:none; border-radius:5px;
+      font-size:13px; cursor:pointer;">
+    Dictionary — WordReference
+  </button>
+</div>
+
+<script>
+(function() {
+  var currentWord = "";
+  var menu = document.getElementById("word-menu");
+
+  document.addEventListener("click", function(e) {
+    var span = e.target.closest ? e.target.closest(".clickword") : null;
+    if (!span) {
+      menu.style.display = "none";
+      return;
+    }
+    e.stopPropagation();
+    currentWord = span.dataset.word;
+    document.getElementById("menu-label").innerText = currentWord;
+    menu.style.display = "block";
+    var x = Math.min(e.clientX, window.innerWidth - 195);
+    var y = e.clientY + 14;
+    menu.style.left = x + "px";
+    menu.style.top = y + "px";
+  });
+
+  window.openReverso = function() {
+    window.open("https://conjugator.reverso.net/conjugation-french-verb-" + currentWord + ".html", "_blank");
+    menu.style.display = "none";
+  };
+
+  window.openDict = function() {
+    window.open("https://www.wordreference.com/fren/" + currentWord, "_blank");
+    menu.style.display = "none";
+  };
+})();
+</script>''',
+        }
+    ],
+    css=(
+        ".card { font-family: arial; font-size: 20px; text-align: center; "
+        "color: black; background-color: white; }\n"
+        ".clickword { cursor: pointer; text-decoration: underline dotted; }\n"
+        ".example { margin-top: 8px; font-style: italic; color: #444; }\n"
+        ".explanation { margin-top: 8px; }"
+    ),
+)
+
 
 def _strip_html(text: str) -> str:
     return re.sub(r"<[^>]+>", "", text).strip()
@@ -78,8 +160,9 @@ def build_deck(
         deck_id = abs(hash(deck_name)) % (1 << 31)
     deck = genanki.Deck(deck_id, deck_name)
     for card in cards:
+        model = JSON_MODEL if card.note_type == "json" else BASIC_MODEL
         note = genanki.Note(
-            model=BASIC_MODEL,
+            model=model,
             fields=[card.front, card.back],
             tags=card.tags,
             guid=_stable_guid(card.front),
@@ -177,6 +260,7 @@ def generate_tts(
             tts_front=card.tts_front,
             tts_back=card.tts_back,
             tts_examples=card.tts_examples,
+            note_type=card.note_type,
         ))
 
     return updated, media_files
@@ -231,6 +315,7 @@ def write_apkg(
                 tts_front=c.tts_front,
                 tts_back=c.tts_back,
                 tts_examples=c.tts_examples,
+                note_type=c.note_type,
             )
             for c in all_cards
         ]
