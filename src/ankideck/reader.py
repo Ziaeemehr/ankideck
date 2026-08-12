@@ -120,6 +120,7 @@ def _build_back_html(
     back_cols: List[str],
     tts_back_col: Optional[str],
     col_labels: Dict[str, str],
+    clickwords: bool = False,
 ) -> str:
     """Format back-side HTML from a row's column values."""
     parts = []
@@ -129,9 +130,12 @@ def _build_back_html(
             continue
         label = col_labels.get(col, col)
         if col == tts_back_col:
-            # Example / spoken sentence: visually separated and italicised
+            # Example / spoken sentence: visually separated and italicised.
+            # Only this column is French, so it is the only one worth making
+            # clickable for dictionary lookup.
+            text = _wrap_clickwords(val) if clickwords else val
             parts.append(
-                f'<div style="margin-top:8px;font-style:italic;color:#444">{val}</div>'
+                f'<div style="margin-top:8px;font-style:italic;color:#444">{text}</div>'
             )
         else:
             parts.append(f"<div><b>{label}:</b> {val}</div>")
@@ -146,6 +150,7 @@ def read_cards_excel(
     col_labels: Optional[Dict[str, str]] = None,
     sheet_name: Optional[str] = None,
     tags: Optional[List[str]] = None,
+    clickwords: bool = False,
 ) -> List[Card]:
     """Read flashcards from an Excel (.xlsx) file with named columns.
 
@@ -161,6 +166,9 @@ def read_cards_excel(
             Defaults to the column name itself.
         sheet_name: Sheet to read (default: first sheet).
         tags: Tags to attach to every card.
+        clickwords: Wrap the French front and the tts_back_col example in
+            .clickword spans so the Anki template's click-to-look-up popup
+            works.  tts_front / tts_back stay plain text for TTS.
 
     Returns:
         List of Card objects with tts_front and optionally tts_back set.
@@ -218,14 +226,16 @@ def read_cards_excel(
         if not front_val:
             continue
 
-        back_html = _build_back_html(row_data, back_cols, tts_back_col, _col_labels)
+        back_html = _build_back_html(
+            row_data, back_cols, tts_back_col, _col_labels, clickwords
+        )
 
         tts_back = ""
         if tts_back_col:
             tts_back = row_data.get(tts_back_col, "").strip()
 
         cards.append(Card(
-            front=front_val,
+            front=_wrap_clickwords(front_val) if clickwords else front_val,
             back=back_html,
             tags=_tags,
             tts_front=front_val,

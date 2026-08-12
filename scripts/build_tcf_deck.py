@@ -41,9 +41,21 @@ def main():
     p.add_argument("--output", "-o", default=DEFAULT_OUTPUT,
                    help=f"Output .apkg path (default: {DEFAULT_OUTPUT})")
     p.add_argument("--tts", action="store_true",
-                   help="Generate French TTS audio (gTTS, requires internet)")
+                   help="Generate French TTS audio")
+    p.add_argument("--engine", default="edge",
+                   choices=["edge", "gtts", "elevenlabs", "voicebox"],
+                   help="TTS engine to use with --tts (default: edge)")
+    p.add_argument("--voicebox-profile",
+                   help="Voice profile id from the local Voicebox app "
+                        "(required for --engine voicebox)")
     p.add_argument("--tts-cache", default=TTS_CACHE,
-                   help=f"Directory for cached MP3s (default: {TTS_CACHE})")
+                   help=f"Directory for cached MP3s (default: {TTS_CACHE}). "
+                        "Use a fresh directory when switching engines, "
+                        "otherwise cached audio from the old engine is reused.")
+    p.add_argument("--clickwords", action="store_true",
+                   help="Wrap French text in .clickword spans so the note "
+                        "type's click-to-look-up popup (Reverso / "
+                        "WordReference) works")
     p.add_argument("--no-dedup", action="store_true",
                    help="Skip duplicate removal (not recommended)")
     args = p.parse_args()
@@ -60,13 +72,23 @@ def main():
         back_cols=["English", "Persian", "Example"],
         tts_back_col="Example" if args.tts else None,
         col_labels={"English": "EN", "Persian": "FA"},
+        clickwords=args.clickwords,
     )
     print(f"  {len(cards)} cards loaded")
 
     output = args.output if args.output.endswith(".apkg") else args.output + ".apkg"
 
+    tts_options = {}
     if args.tts:
-        print(f"Generating TTS audio (lang={TTS_LANG}) — this may take a while...")
+        if args.engine == "voicebox" and not args.voicebox_profile:
+            print("Error: --engine voicebox requires --voicebox-profile",
+                  file=sys.stderr)
+            sys.exit(1)
+        tts_options["engine"] = args.engine
+        if args.voicebox_profile:
+            tts_options["voicebox_profile_id"] = args.voicebox_profile
+        print(f"Generating TTS audio (lang={TTS_LANG}, engine={args.engine}) "
+              "— this may take a while...")
         print(f"  Cache dir: {args.tts_cache}")
 
     n = write_apkg(
@@ -76,6 +98,7 @@ def main():
         check_duplicates=not args.no_dedup,
         tts_lang=TTS_LANG if args.tts else None,
         tts_cache_dir=args.tts_cache,
+        **tts_options,
     )
 
     removed = len(cards) - n

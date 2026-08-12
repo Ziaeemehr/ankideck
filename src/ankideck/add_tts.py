@@ -10,16 +10,19 @@ from ankideck.tts import make_tts, strip_html
 
 def main():
     if len(sys.argv) < 2:
-        print("Usage: python add_tts.py <deck_name> [front_engine] [back_engine] [elevenlabs_api_key_file]")
+        print("Usage: python add_tts.py <deck_name> [front_engine] [back_engine] [elevenlabs_api_key_file] [voicebox_profile_id]")
         print("  deck_name: Name of the Anki deck")
-        print("  front_engine: 'edge', 'gtts', or 'elevenlabs' (default: 'edge')")
-        print("  back_engine: 'edge', 'gtts', 'elevenlabs', or 'none' to skip Back (default: 'edge')")
+        print("  front_engine: 'edge', 'gtts', 'elevenlabs', or 'voicebox' (default: 'edge')")
+        print("  back_engine: same choices, or 'none' to skip Back (default: 'edge')")
         print("  elevenlabs_api_key_file: Path to ElevenLabs API key file")
         print("                           (default: '/Users/tng/Projects/Language/FR/Anki_decks/elevenlabs_api_key.txt')")
+        print("  voicebox_profile_id: Voice profile id from the local Voicebox app")
+        print("                       (required when an engine is 'voicebox'; see GET /profiles)")
         print("\nExamples:")
         print("  python add_tts.py 'My Deck'  # Both fields with Edge TTS")
         print("  python add_tts.py 'My Deck' elevenlabs gtts  # Front with ElevenLabs, Back with gtts")
         print("  python add_tts.py 'My Deck' elevenlabs none  # Only Front with ElevenLabs")
+        print("  python add_tts.py 'My Deck' voicebox none '' <profile-id>  # Front with local Voicebox")
         sys.exit(1)
 
     DECK_NAME = sys.argv[1].replace(" ", "_")
@@ -28,7 +31,8 @@ def main():
     FRONT_ENGINE = sys.argv[2] if len(sys.argv) > 2 else "edge"
     BACK_ENGINE = sys.argv[3] if len(sys.argv) > 3 else "edge"
     ELEVENLABS_API_KEY_FILE = sys.argv[4] if len(sys.argv) > 4 else "/Users/tng/Projects/Language/FR/Anki_decks/elevenlabs_api_key.txt"
-    
+    VOICEBOX_PROFILE_ID = sys.argv[5] if len(sys.argv) > 5 else None
+
     # Check if back voice should be added
     ADD_BACK_VOICE = BACK_ENGINE.lower() != "none"
     
@@ -78,7 +82,8 @@ def main():
                     lang=LANG,
                     tts_slow=TTS_SLOW,
                     sleep_time=SLEEP_TIME,
-                    elevenlabs_api_key_file=ELEVENLABS_API_KEY_FILE
+                    elevenlabs_api_key_file=ELEVENLABS_API_KEY_FILE,
+                    voicebox_profile_id=VOICEBOX_PROFILE_ID
                 )
                 if path:
                     with open(path, "rb") as f:
@@ -108,7 +113,8 @@ def main():
                     lang=LANG,
                     tts_slow=TTS_SLOW,
                     sleep_time=SLEEP_TIME,
-                    elevenlabs_api_key_file=ELEVENLABS_API_KEY_FILE
+                    elevenlabs_api_key_file=ELEVENLABS_API_KEY_FILE,
+                    voicebox_profile_id=VOICEBOX_PROFILE_ID
                 )
                 if path:
                     with open(path, "rb") as f:

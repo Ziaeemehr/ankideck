@@ -4,6 +4,7 @@ Supported engines:
   - edge: Microsoft Edge TTS (free, requires internet, natural-sounding voices) [default]
   - gtts: Google Text-to-Speech (free, requires internet)
   - elevenlabs: ElevenLabs API (higher quality, requires API key)
+  - voicebox: local Voicebox app (offline, no API key, requires the app running)
 
 Usage example:
     from ankideck.tts import make_tts
@@ -68,7 +69,7 @@ def make_tts_gtts(
 # Default Edge TTS voice per language code. Override with the `voice`
 # argument or by passing a full voice name as `lang` (e.g. "fr-FR-HenriNeural").
 EDGE_DEFAULT_VOICES = {
-    "fr": "fr-FR-DeniseNeural",
+    "fr": "fr-FR-VivienneMultilingualNeural",
     "en": "en-US-AriaNeural",
     "de": "de-DE-KatjaNeural",
     "es": "es-ES-ElviraNeural",
@@ -164,6 +165,91 @@ def make_tts_elevenlabs(
         return None
 
 
+VOICEBOX_HOST = "http://127.0.0.1:17493"
+
+
+def make_tts_voicebox(
+    sentences: List[str],
+    audio_path: str,
+    profile_id: str,
+    lang: str = "fr",
+    host: str = VOICEBOX_HOST,
+    vb_engine: str = "kokoro",
+    pause: bool = False,
+    pause_duration: int = 700,
+    timeout: int = 600,
+) -> Optional[str]:
+    """Generate audio with a locally running Voicebox instance.
+
+    Voicebox runs offline on the user's machine, so unlike edge/gtts it
+    needs no internet but does need the desktop app (or its server) up.
+    Generation is asynchronous: POST /generate returns an id, progress
+    arrives as a server-sent event stream, and the finished WAV is then
+    fetched and transcoded to mp3 for Anki.
+
+    Returns the path on success, None on failure.
+    """
+    import json
+    import requests
+    from pydub import AudioSegment
+
+    text = " ".join(s.strip() for s in sentences if s.strip())
+    if not text:
+        return None
+
+    cache_dir = os.path.dirname(audio_path) or "."
+    os.makedirs(cache_dir, exist_ok=True)
+
+    try:
+        resp = requests.post(
+            f"{host}/generate",
+            json={
+                "profile_id": profile_id,
+                "text": text,
+                "language": lang,
+                "engine": vb_engine,
+            },
+            timeout=60,
+        )
+        resp.raise_for_status()
+        gen_id = resp.json()["id"]
+
+        # /generate/{id}/status is an SSE stream, not plain JSON: consume
+        # events until one reports a terminal state.
+        status = None
+        with requests.get(
+            f"{host}/generate/{gen_id}/status", stream=True, timeout=timeout
+        ) as stream:
+            stream.raise_for_status()
+            for line in stream.iter_lines(decode_unicode=True):
+                if not line or not line.startswith("data: "):
+                    continue
+                event = json.loads(line[len("data: "):])
+                status = event.get("status")
+                if status in ("completed", "failed", "error", "cancelled"):
+                    break
+
+        if status != "completed":
+            print(f"Voicebox generation {status or 'did not finish'}.")
+            return None
+
+        audio = requests.get(f"{host}/audio/{gen_id}", timeout=timeout)
+        audio.raise_for_status()
+
+        temp_path = os.path.join(cache_dir, "_tmp_tts_voicebox.wav")
+        with open(temp_path, "wb") as f:
+            f.write(audio.content)
+
+        combined = AudioSegment.from_file(temp_path)
+        if pause:
+            combined += AudioSegment.silent(duration=pause_duration)
+        combined.export(audio_path, format="mp3")
+        return audio_path
+    except Exception as e:
+        print(f"Voicebox error: {e}")
+        return None
+
+
 def make_tts(
     sentences: List[str],
     filename: str,
@@ -176,6 +262,9 @@ def make_tts(
     sleep_time: float = 0.4,
     elevenlabs_api_key_file: Optional[str] = None,
     voice: Optional[str] = None,
+    voicebox_profile_id: Optional[str] = None,
+    voicebox_host: str = VOICEBOX_HOST,
+    voicebox_engine: str = "kokoro",
 ) -> Optional[str]:
     """Generate TTS audio and cache it to disk.
 
@@ -198,6 +287,21 @@ def make_tts(
             api_key_file=elevenlabs_api_key_file,
             filename=filename,
             cache_dir=cache_dir,
+        )
+
+    if engine == "voicebox":
+        if not voicebox_profile_id:
+            print("Voicebox profile id not provided.")
+            return None
+        return make_tts_voicebox(
+            sentences=sentences,
+            audio_path=audio_path,
+            profile_id=voicebox_profile_id,
+            lang=lang,
+            host=voicebox_host,
+            vb_engine=voicebox_engine,
+            pause=pause,
+            pause_duration=pause_duration,
         )
 
     if engine == "gtts":

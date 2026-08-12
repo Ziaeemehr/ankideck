@@ -18,6 +18,7 @@ Update without losing study progress::
 """
 
 import argparse
+import html
 import os
 import re
 import sys
@@ -141,7 +142,10 @@ def _stable_guid(front: str) -> str:
       instead of creating a duplicate, preserving review progress.
     - Only genuinely new fronts get new GUIDs (new cards).
     """
-    key = _strip_html(front).strip().lower()
+    # Entities are unescaped so that marking words up (e.g. wrapping them in
+    # .clickword spans, which escapes apostrophes to &#x27;) keeps the GUID
+    # of an existing card identical and preserves its review history.
+    key = html.unescape(_strip_html(front)).strip().lower()
     return genanki.guid_for(key)
 
 
@@ -175,12 +179,17 @@ def generate_tts(
     cards: List[Card],
     lang: str,
     cache_dir: str,
+    **tts_options,
 ) -> tuple:
     """Generate TTS audio for cards that carry tts_front / tts_back.
 
     Returns (modified_cards, media_files) where each card's front/back
     fields have the sound tag appended and media_files is the list of
     generated MP3 paths.
+
+    Extra keyword arguments are forwarded to ankideck.tts.make_tts, so
+    callers can pick an engine and its settings, e.g.
+    engine="voicebox", voicebox_profile_id="...".
     """
     from tqdm import tqdm
     from ankideck.tts import make_tts, strip_html
@@ -224,7 +233,7 @@ def generate_tts(
         if front_text.strip():
             fname = f"tts_front_{i:04d}.mp3"
             bar.set_postfix_str(f"front: {front_text[:20]}", refresh=False)
-            path = make_tts([front_text], fname, cache_dir, lang=lang)
+            path = make_tts([front_text], fname, cache_dir, lang=lang, **tts_options)
             if path:
                 media_files.append(path)
                 new_front = card.front + f"<br>[sound:{fname}]"
@@ -233,7 +242,7 @@ def generate_tts(
         if back_text.strip():
             fname = f"tts_back_{i:04d}.mp3"
             bar.set_postfix_str(f"example: {back_text[:20]}", refresh=False)
-            path = make_tts([back_text], fname, cache_dir, lang=lang)
+            path = make_tts([back_text], fname, cache_dir, lang=lang, **tts_options)
             if path:
                 media_files.append(path)
                 new_back = card.back + f"<br>[sound:{fname}]"
@@ -246,7 +255,7 @@ def generate_tts(
                 continue
             fname = f"tts_ex_{i:04d}_{j:02d}.mp3"
             bar.set_postfix_str(f"example {j}: {example_text[:20]}", refresh=False)
-            path = make_tts([example_text], fname, cache_dir, lang=lang)
+            path = make_tts([example_text], fname, cache_dir, lang=lang, **tts_options)
             if path:
                 media_files.append(path)
                 new_back = new_back.replace(placeholder, f"[sound:{fname}]")
@@ -274,6 +283,7 @@ def write_apkg(
     check_duplicates: bool = True,
     tts_lang: Optional[str] = None,
     tts_cache_dir: str = "tts_cache",
+    **tts_options,
 ) -> int:
     """Write cards to an .apkg file.
 
@@ -286,6 +296,9 @@ def write_apkg(
         tts_lang: If set (e.g. "fr"), generate TTS audio and embed it.
             Uses each Card's tts_front / tts_back fields.
         tts_cache_dir: Directory for cached TTS MP3 files.
+        **tts_options: Forwarded to ankideck.tts.make_tts to select the
+            engine and its settings, e.g. engine="voicebox",
+            voicebox_profile_id="...".
 
     Returns:
         Number of cards written.
@@ -303,8 +316,14 @@ def write_apkg(
     extra_media: List[str] = []
 
     if tts_lang:
-        print(f"Generating TTS audio (lang={tts_lang}) into '{tts_cache_dir}/'...")
-        all_cards, extra_media = generate_tts(all_cards, tts_lang, tts_cache_dir)
+        engine_label = tts_options.get("engine", "edge")
+        print(
+            f"Generating TTS audio (lang={tts_lang}, engine={engine_label}) "
+            f"into '{tts_cache_dir}/'..."
+        )
+        all_cards, extra_media = generate_tts(
+            all_cards, tts_lang, tts_cache_dir, **tts_options
+        )
         print(f"  {len(extra_media)} audio file(s) ready.")
     else:
         all_cards = [
