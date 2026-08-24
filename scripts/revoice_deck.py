@@ -20,6 +20,17 @@ generate costs nothing.  Re-running any step skips work already done, and the
 backup directory holds the original clips if you want to roll back (re-upload
 them with ``--cache-dir <backup-dir> --step upload``).
 
+Choosing a voice:
+
+    Edge's ``*MultilingualNeural`` voices (including fr-FR-Vivienne, the
+    default in ``tts.py``) detect the language of each phrase and switch to
+    foreign phonetics on words they read as foreign.  On short front-side
+    prompts there is too little context for that to work and French words
+    spelled like English ones -- "le budget", "la boxe", "un ticket" -- come
+    out with an English accent.  For single words and short phrases prefer a
+    monolingual voice, e.g. ``--voice fr-FR-DeniseNeural`` or
+    ``fr-FR-HenriNeural``, which always applies French phonetics.
+
 Which text gets spoken:
 
     Front  the field text, minus HTML and the sound tag
