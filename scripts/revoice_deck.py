@@ -1,0 +1,260 @@
+#!/usr/bin/env python3
+"""Demo: re-voice a live Anki deck with a different TTS engine.
+
+Replaces the audio behind the ``[sound:...]`` tags a deck already has, e.g.
+swapping robotic gtts clips for natural Edge TTS ones.  The existing media
+filenames are reused, so the notes themselves are never modified -- only the
+files in Anki's media folder are overwritten.  That keeps the cards, their
+scheduling and their HTML exactly as they are.
+
+Anki must be running with AnkiConnect installed.
+
+Runs in three resumable steps (``--step all`` does them in order):
+
+    backup    download the current audio to ``--backup-dir``
+    generate  synthesize replacements into ``--cache-dir``
+    upload    push the generated files into Anki's media folder
+
+Nothing is overwritten in Anki until ``upload``, so a failed or interrupted
+generate costs nothing.  Re-running any step skips work already done, and the
+backup directory holds the original clips if you want to roll back (re-upload
+them with ``--cache-dir <backup-dir> --step upload``).
+
+Which text gets spoken:
+
+    Front  the field text, minus HTML and the sound tag
+    Back   by default only the example sentence -- the first italic block of
+           the field -- so translations and notes are not read aloud; pass
+           ``--back-text full`` to speak the whole field instead
+
+Run:
+    python scripts/revoice_deck.py "My Deck"
+    python scripts/revoice_deck.py "My Deck" --engine edge --voice fr-FR-HenriNeural
+    python scripts/revoice_deck.py "My Deck" --fields front --step backup
+    python scripts/revoice_deck.py "My Deck" --dry-run
+"""
+
+import argparse
+import base64
+import html
+import os
+import re
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
+
+from ankideck.anki_connect import invoke
+from ankideck.tts import make_tts
+
+SOUND_TAG = re.compile(r"\[sound:([^\]]+)\]")
+ITALIC_BLOCK = re.compile(r"<(div|i|em)[^>]*(?:font-style:\s*italic|)[^>]*>(.*?)</\1>", re.S)
+ITALIC_STYLED = re.compile(r"<[^>]*font-style:\s*italic[^>]*>(.*?)</[a-z]+>", re.S)
+
+
+def plain_text(field_html: str) -> str:
+    """Field HTML -> the bare text a TTS engine should read."""
+    text = SOUND_TAG.sub("", field_html)
+    text = re.sub(r"<br\s*/?>", " ", text)
+    text = re.sub(r"<[^>]+>", "", text)
+    return html.unescape(re.sub(r"\s+", " ", text)).strip()
+
+
+def example_text(field_html: str) -> str:
+    """The italic example sentence of a back field, or the whole field."""
+    match = ITALIC_STYLED.search(field_html) or ITALIC_BLOCK.search(field_html)
+    if match:
+        found = plain_text(match.group(match.lastindex))
+        if found:
+            return found
+    return plain_text(field_html)
+
+
+def collect_clips(deck, fields, back_text):
+    """Return [(media_filename, text)] for every sound tag in the deck.
+
+    Notes whose field has no sound tag are skipped: this script replaces
+    existing audio, it does not add audio to cards that never had any (use
+    ``add_tts.py`` for that).
+    """
+    note_ids = invoke("findNotes", query=f'deck:"{deck}"')
+    if not note_ids:
+        print(f"No notes found in deck '{deck}'.")
+        return []
+
+    clips, skipped = [], 0
+    for note in invoke("notesInfo", notes=note_ids):
+        for field in fields:
+            field_html = note["fields"].get(field, {}).get("value", "")
+            filenames = SOUND_TAG.findall(field_html)
+            if not filenames:
+                skipped += 1
+                continue
+            if field.lower() == "back" and back_text == "example":
+                text = example_text(field_html)
+            else:
+                text = plain_text(field_html)
+            if not text:
+                print(f"  note {note['noteId']}: '{field}' has audio but no text, skipping")
+                continue
+            # A field with several clips gets the same text for each; that is
+            # rare and better than silently voicing only the first.
+            for filename in filenames:
+                clips.append((filename, text))
+
+    seen = {}
+    for filename, text in clips:
+        if filename in seen and seen[filename] != text:
+            raise SystemExit(
+                f"Media file '{filename}' is used for two different texts; "
+                "aborting rather than overwriting it with the wrong audio."
+            )
+        seen[filename] = text
+
+    print(f"{len(clips)} clips in {len(note_ids)} notes"
+          f"{f' ({skipped} fields had no audio)' if skipped else ''}")
+    return clips
+
+
+def backup(clips, backup_dir):
+    os.makedirs(backup_dir, exist_ok=True)
+    saved = present = missing = 0
+    for filename, _ in clips:
+        path = os.path.join(backup_dir, filename)
+        if os.path.exists(path):
+            present += 1
+            continue
+        data = invoke("retrieveMediaFile", filename=filename)
+        if data is False:
+            print(f"  not in Anki's media folder: {filename}")
+            missing += 1
+            continue
+        with open(path, "wb") as f:
+            f.write(base64.b64decode(data))
+        saved += 1
+        if saved % 200 == 0:
+            print(f"  backed up {saved}...", flush=True)
+    print(f"backup: {saved} saved, {present} already there, {missing} missing "
+          f"-> {backup_dir}/")
+    return missing
+
+
+def generate(clips, cache_dir, engine, voice, lang, elevenlabs_key, voicebox_profile):
+    os.makedirs(cache_dir, exist_ok=True)
+    todo = [c for c in clips if not os.path.exists(os.path.join(cache_dir, c[0]))]
+    print(f"generate: {len(clips) - len(todo)} cached, {len(todo)} to synthesize "
+          f"with {engine}", flush=True)
+
+    failed = 0
+    for i, (filename, text) in enumerate(todo, 1):
+        path = make_tts(
+            sentences=[text],
+            filename=filename,
+            cache_dir=cache_dir,
+            engine=engine,
+            lang=lang,
+            voice=voice,
+            elevenlabs_api_key_file=elevenlabs_key,
+            voicebox_profile_id=voicebox_profile,
+        )
+        if not path or not os.path.exists(path) or os.path.getsize(path) == 0:
+            print(f"  FAILED {filename}: {text[:60]}")
+            if path and os.path.exists(path):
+                os.remove(path)  # so a re-run retries instead of caching silence
+            failed += 1
+        if i % 50 == 0:
+            print(f"  {i}/{len(todo)}", flush=True)
+    print(f"generate: {len(todo) - failed} written to {cache_dir}/, {failed} failed")
+    return failed
+
+
+def upload(clips, cache_dir):
+    stored = 0
+    for filename, _ in clips:
+        path = os.path.join(cache_dir, filename)
+        if not os.path.exists(path) or os.path.getsize(path) == 0:
+            print(f"  no audio to upload for {filename}, leaving it alone")
+            continue
+        with open(path, "rb") as f:
+            invoke("storeMediaFile", filename=filename,
+                   data=base64.b64encode(f.read()).decode())
+        stored += 1
+        if stored % 200 == 0:
+            print(f"  uploaded {stored}...", flush=True)
+    print(f"upload: {stored}/{len(clips)} media files replaced in Anki")
+    return stored
+
+
+def parse_args(argv=None):
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    parser.add_argument("deck", help="deck name, as shown in Anki")
+    parser.add_argument("--engine", default="edge",
+                        choices=["edge", "gtts", "elevenlabs", "voicebox"],
+                        help="TTS engine for the new audio (default: edge)")
+    parser.add_argument("--voice", default=None,
+                        help="engine voice override, e.g. fr-FR-HenriNeural")
+    parser.add_argument("--lang", default="fr", help="language code (default: fr)")
+    parser.add_argument("--fields", default="Front,Back",
+                        help="comma-separated fields to re-voice (default: Front,Back)")
+    parser.add_argument("--back-text", default="example", choices=["example", "full"],
+                        help="what to speak on the back: only the italic example "
+                             "sentence, or the whole field (default: example)")
+    parser.add_argument("--step", default="all",
+                        choices=["all", "backup", "generate", "upload"],
+                        help="which step to run (default: all)")
+    parser.add_argument("--cache-dir", default=None,
+                        help="where new audio is written (default: revoice_<engine>_<deck>)")
+    parser.add_argument("--backup-dir", default=None,
+                        help="where current audio is saved (default: revoice_backup_<deck>)")
+    parser.add_argument("--elevenlabs-key", default=None,
+                        help="path to a file holding an ElevenLabs API key")
+    parser.add_argument("--voicebox-profile", default=None,
+                        help="Voicebox profile id (required for --engine voicebox)")
+    parser.add_argument("--dry-run", action="store_true",
+                        help="list what would be voiced and exit")
+    return parser.parse_args(argv)
+
+
+def main(argv=None):
+    args = parse_args(argv)
+    slug = re.sub(r"\W+", "_", args.deck).strip("_")
+    cache_dir = args.cache_dir or f"revoice_{args.engine}_{slug}"
+    backup_dir = args.backup_dir or f"revoice_backup_{slug}"
+    fields = [f.strip() for f in args.fields.split(",") if f.strip()]
+
+    if args.engine == "voicebox" and not args.voicebox_profile:
+        sys.exit("--engine voicebox needs --voicebox-profile "
+                 "(list them: curl -s http://127.0.0.1:17493/profiles)")
+
+    clips = collect_clips(args.deck, fields, args.back_text)
+    if not clips:
+        return 1
+
+    if args.dry_run:
+        for filename, text in clips[:10]:
+            print(f"  {filename}: {text[:70]}")
+        if len(clips) > 10:
+            print(f"  ... and {len(clips) - 10} more")
+        print(f"\nDry run: nothing generated or uploaded. "
+              f"Would write to {cache_dir}/ and back up to {backup_dir}/.")
+        return 0
+
+    if args.step in ("all", "backup"):
+        backup(clips, backup_dir)
+    if args.step in ("all", "generate"):
+        if generate(clips, cache_dir, args.engine, args.voice, args.lang,
+                    args.elevenlabs_key, args.voicebox_profile):
+            print("Some clips failed; re-run to retry them "
+                  "(finished ones are cached).")
+    if args.step in ("all", "upload"):
+        upload(clips, cache_dir)
+        print(f"\nDone. Originals are in {backup_dir}/ if you need to roll back:\n"
+              f"  python {Path(__file__).name} \"{args.deck}\" "
+              f"--cache-dir {backup_dir} --step upload")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
