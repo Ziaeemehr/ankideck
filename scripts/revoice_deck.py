@@ -174,30 +174,28 @@ def generate(clips, cache_dir, engine, voice, lang, elevenlabs_key,
     print(f"generate: {len(clips) - len(todo)} cached, {len(todo)} to synthesize "
           f"with {engine} ({jobs} at a time)", flush=True)
 
-    # Each worker synthesizes into its own directory: make_tts writes a
-    # temp file next to its output, and the name is fixed per engine, so
-    # workers sharing a directory would clobber each other's temp file.
-    def work_dir(slot):
-        d = os.path.join(cache_dir, f".w{slot}")
-        os.makedirs(d, exist_ok=True)
-        return d
-
     done = {"n": 0}
     lock = threading.Lock()
 
-    def synth(item):
-        index, (filename, text) = item
+    def synth(clip):
+        filename, text = clip
         target = os.path.join(cache_dir, filename)
-        staging = work_dir(index % jobs)
+        # Synthesize under a private name and rename only once the file is
+        # complete, so an interrupted run can never leave a half-written clip
+        # that the next run mistakes for finished work.
+        staging_name = f".part_{filename}"
+        staging_path = os.path.join(cache_dir, staging_name)
         ok = False
         # Network engines drop the occasional request, more so under
         # concurrency; without a retry those clips silently keep their old
         # audio and the deck ends up voiced by two engines.
         for attempt in range(retries):
+            if os.path.exists(staging_path):
+                os.remove(staging_path)  # else make_tts returns it as cached
             path = make_tts(
                 sentences=[text],
-                filename=filename,
-                cache_dir=staging,
+                filename=staging_name,
+                cache_dir=cache_dir,
                 engine=engine,
                 lang=lang,
                 voice=voice,
@@ -209,7 +207,7 @@ def generate(clips, cache_dir, engine, voice, lang, elevenlabs_key,
                 os.replace(path, target)
                 break
             if path and os.path.exists(path):
-                os.remove(path)  # so make_tts does not return the stub next time
+                os.remove(path)
             if attempt < retries - 1:
                 time.sleep(2 * (attempt + 1))
         if not ok:
@@ -222,16 +220,9 @@ def generate(clips, cache_dir, engine, voice, lang, elevenlabs_key,
 
     if jobs > 1:
         with ThreadPoolExecutor(max_workers=jobs) as pool:
-            results = list(pool.map(synth, enumerate(todo)))
+            results = list(pool.map(synth, todo))
     else:
-        results = [synth(item) for item in enumerate(todo)]
-
-    for slot in range(jobs):
-        d = os.path.join(cache_dir, f".w{slot}")
-        if os.path.isdir(d):
-            for leftover in os.listdir(d):
-                os.remove(os.path.join(d, leftover))
-            os.rmdir(d)
+        results = [synth(clip) for clip in todo]
 
     failed = results.count(False)
     print(f"generate: {len(todo) - failed} written to {cache_dir}/, {failed} failed")

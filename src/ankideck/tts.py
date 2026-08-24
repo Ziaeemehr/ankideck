@@ -16,6 +16,18 @@ import re
 from typing import List, Optional
 
 
+def _temp_path(audio_path: str, suffix: str) -> str:
+    """A scratch path unique to this output file.
+
+    The temp name must not be shared: callers may synthesize several clips
+    at once (see scripts/revoice_deck.py --jobs), and a fixed name means one
+    worker reads the half-written file of another and the wrong audio ends
+    up under the wrong name.
+    """
+    directory = os.path.dirname(audio_path) or "."
+    return os.path.join(directory, f".tmp_{os.path.basename(audio_path)}{suffix}")
+
+
 def strip_html(text: str) -> str:
     return re.sub(r"<[^>]+>", "", text).strip()
 
@@ -45,20 +57,23 @@ def make_tts_gtts(
 
     try:
         combined = AudioSegment.silent(duration=0)
-        cache_dir = os.path.dirname(audio_path) or "."
+        temp_path = _temp_path(audio_path, ".gtts.mp3")
 
-        for sent in sentences:
-            if not sent.strip():
-                continue
-            tts = gTTS(sent, lang=lang, slow=tts_slow)
-            temp_path = os.path.join(cache_dir, "_tmp_tts.mp3")
-            tts.save(temp_path)
-            clip = AudioSegment.from_mp3(temp_path)
-            combined += clip
-            if pause:
-                combined += AudioSegment.silent(duration=pause_duration)
+        try:
+            for sent in sentences:
+                if not sent.strip():
+                    continue
+                tts = gTTS(sent, lang=lang, slow=tts_slow)
+                tts.save(temp_path)
+                clip = AudioSegment.from_mp3(temp_path)
+                combined += clip
+                if pause:
+                    combined += AudioSegment.silent(duration=pause_duration)
 
-        combined.export(audio_path, format="mp3")
+            combined.export(audio_path, format="mp3")
+        finally:
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
         time.sleep(sleep_time)
         return audio_path
     except Exception as e:
@@ -114,13 +129,17 @@ def make_tts_edge(
         await communicate.save(out_path)
 
     try:
-        temp_path = os.path.join(cache_dir, "_tmp_tts_edge.mp3")
-        asyncio.run(_synth(text, temp_path))
-        combined = AudioSegment.from_mp3(temp_path)
-        if pause:
-            combined += AudioSegment.silent(duration=pause_duration)
+        temp_path = _temp_path(audio_path, ".edge.mp3")
+        try:
+            asyncio.run(_synth(text, temp_path))
+            combined = AudioSegment.from_mp3(temp_path)
+            if pause:
+                combined += AudioSegment.silent(duration=pause_duration)
 
-        combined.export(audio_path, format="mp3")
+            combined.export(audio_path, format="mp3")
+        finally:
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
         return audio_path
     except Exception as e:
         print(f"Edge TTS error: {e}")
@@ -236,14 +255,18 @@ def make_tts_voicebox(
         audio = requests.get(f"{host}/audio/{gen_id}", timeout=timeout)
         audio.raise_for_status()
 
-        temp_path = os.path.join(cache_dir, "_tmp_tts_voicebox.wav")
-        with open(temp_path, "wb") as f:
-            f.write(audio.content)
+        temp_path = _temp_path(audio_path, ".voicebox.wav")
+        try:
+            with open(temp_path, "wb") as f:
+                f.write(audio.content)
 
-        combined = AudioSegment.from_file(temp_path)
-        if pause:
-            combined += AudioSegment.silent(duration=pause_duration)
-        combined.export(audio_path, format="mp3")
+            combined = AudioSegment.from_file(temp_path)
+            if pause:
+                combined += AudioSegment.silent(duration=pause_duration)
+            combined.export(audio_path, format="mp3")
+        finally:
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
         return audio_path
     except Exception as e:
         print(f"Voicebox error: {e}")
