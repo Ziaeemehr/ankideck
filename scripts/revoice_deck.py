@@ -51,37 +51,54 @@ import html
 import os
 import re
 import sys
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from ankideck.anki_connect import invoke
-from ankideck.tts import make_tts
+from ankideck.tts import _remove_non_latin, make_tts
 
 SOUND_TAG = re.compile(r"\[sound:([^\]]+)\]")
 ITALIC_BLOCK = re.compile(r"<(div|i|em)[^>]*(?:font-style:\s*italic|)[^>]*>(.*?)</\1>", re.S)
 ITALIC_STYLED = re.compile(r"<[^>]*font-style:\s*italic[^>]*>(.*?)</[a-z]+>", re.S)
 
 
-def plain_text(field_html: str) -> str:
-    """Field HTML -> the bare text a TTS engine should read."""
-    text = SOUND_TAG.sub("", field_html)
+def plain_text(field_html: str, strip_non_latin: bool = True) -> str:
+    """Field HTML -> the bare text a TTS engine should read.
+
+    Only the text *before* the first sound tag is kept.  Audio belongs to
+    the text it follows, and cards sometimes park a translation or a note
+    after the tag which should not be read aloud.  Fields whose tag sits at
+    the very end -- the common case -- are unaffected.
+
+    Non-Latin scripts (Persian, Arabic, ...) are dropped by default: these
+    are foreign-language glosses, and a French voice reading them produces
+    noise at best.
+    """
+    head = SOUND_TAG.split(field_html)[0]
+    text = head if head.strip() else SOUND_TAG.sub("", field_html)
     text = re.sub(r"<br\s*/?>", " ", text)
     text = re.sub(r"<[^>]+>", "", text)
-    return html.unescape(re.sub(r"\s+", " ", text)).strip()
+    text = html.unescape(re.sub(r"\s+", " ", text)).strip()
+    if strip_non_latin:
+        text = _remove_non_latin(text)
+    return text.strip()
 
 
-def example_text(field_html: str) -> str:
+def example_text(field_html: str, strip_non_latin: bool = True) -> str:
     """The italic example sentence of a back field, or the whole field."""
     match = ITALIC_STYLED.search(field_html) or ITALIC_BLOCK.search(field_html)
     if match:
-        found = plain_text(match.group(match.lastindex))
+        found = plain_text(match.group(match.lastindex), strip_non_latin)
         if found:
             return found
-    return plain_text(field_html)
+    return plain_text(field_html, strip_non_latin)
 
 
-def collect_clips(deck, fields, back_text):
+def collect_clips(deck, fields, back_text, strip_non_latin=True):
     """Return [(media_filename, text)] for every sound tag in the deck.
 
     Notes whose field has no sound tag are skipped: this script replaces
@@ -102,9 +119,9 @@ def collect_clips(deck, fields, back_text):
                 skipped += 1
                 continue
             if field.lower() == "back" and back_text == "example":
-                text = example_text(field_html)
+                text = example_text(field_html, strip_non_latin)
             else:
-                text = plain_text(field_html)
+                text = plain_text(field_html, strip_non_latin)
             if not text:
                 print(f"  note {note['noteId']}: '{field}' has audio but no text, skipping")
                 continue
@@ -150,31 +167,73 @@ def backup(clips, backup_dir):
     return missing
 
 
-def generate(clips, cache_dir, engine, voice, lang, elevenlabs_key, voicebox_profile):
+def generate(clips, cache_dir, engine, voice, lang, elevenlabs_key,
+             voicebox_profile, jobs=1, retries=4):
     os.makedirs(cache_dir, exist_ok=True)
     todo = [c for c in clips if not os.path.exists(os.path.join(cache_dir, c[0]))]
     print(f"generate: {len(clips) - len(todo)} cached, {len(todo)} to synthesize "
-          f"with {engine}", flush=True)
+          f"with {engine} ({jobs} at a time)", flush=True)
 
-    failed = 0
-    for i, (filename, text) in enumerate(todo, 1):
-        path = make_tts(
-            sentences=[text],
-            filename=filename,
-            cache_dir=cache_dir,
-            engine=engine,
-            lang=lang,
-            voice=voice,
-            elevenlabs_api_key_file=elevenlabs_key,
-            voicebox_profile_id=voicebox_profile,
-        )
-        if not path or not os.path.exists(path) or os.path.getsize(path) == 0:
-            print(f"  FAILED {filename}: {text[:60]}")
+    # Each worker synthesizes into its own directory: make_tts writes a
+    # temp file next to its output, and the name is fixed per engine, so
+    # workers sharing a directory would clobber each other's temp file.
+    def work_dir(slot):
+        d = os.path.join(cache_dir, f".w{slot}")
+        os.makedirs(d, exist_ok=True)
+        return d
+
+    done = {"n": 0}
+    lock = threading.Lock()
+
+    def synth(item):
+        index, (filename, text) = item
+        target = os.path.join(cache_dir, filename)
+        staging = work_dir(index % jobs)
+        ok = False
+        # Network engines drop the occasional request, more so under
+        # concurrency; without a retry those clips silently keep their old
+        # audio and the deck ends up voiced by two engines.
+        for attempt in range(retries):
+            path = make_tts(
+                sentences=[text],
+                filename=filename,
+                cache_dir=staging,
+                engine=engine,
+                lang=lang,
+                voice=voice,
+                elevenlabs_api_key_file=elevenlabs_key,
+                voicebox_profile_id=voicebox_profile,
+            )
+            ok = bool(path) and os.path.exists(path) and os.path.getsize(path) > 0
+            if ok:
+                os.replace(path, target)
+                break
             if path and os.path.exists(path):
-                os.remove(path)  # so a re-run retries instead of caching silence
-            failed += 1
-        if i % 50 == 0:
-            print(f"  {i}/{len(todo)}", flush=True)
+                os.remove(path)  # so make_tts does not return the stub next time
+            if attempt < retries - 1:
+                time.sleep(2 * (attempt + 1))
+        if not ok:
+            print(f"  FAILED after {retries} tries {filename}: {text[:60]}", flush=True)
+        with lock:
+            done["n"] += 1
+            if done["n"] % 50 == 0:
+                print(f"  {done['n']}/{len(todo)}", flush=True)
+        return ok
+
+    if jobs > 1:
+        with ThreadPoolExecutor(max_workers=jobs) as pool:
+            results = list(pool.map(synth, enumerate(todo)))
+    else:
+        results = [synth(item) for item in enumerate(todo)]
+
+    for slot in range(jobs):
+        d = os.path.join(cache_dir, f".w{slot}")
+        if os.path.isdir(d):
+            for leftover in os.listdir(d):
+                os.remove(os.path.join(d, leftover))
+            os.rmdir(d)
+
+    failed = results.count(False)
     print(f"generate: {len(todo) - failed} written to {cache_dir}/, {failed} failed")
     return failed
 
@@ -223,6 +282,14 @@ def parse_args(argv=None):
                         help="path to a file holding an ElevenLabs API key")
     parser.add_argument("--voicebox-profile", default=None,
                         help="Voicebox profile id (required for --engine voicebox)")
+    parser.add_argument("--jobs", type=int, default=8,
+                        help="clips to synthesize at once (default: 8; use 1 to "
+                             "serialize if an engine rate-limits you)")
+    parser.add_argument("--retries", type=int, default=4,
+                        help="attempts per clip before giving up (default: 4)")
+    parser.add_argument("--keep-non-latin", action="store_true",
+                        help="also speak non-Latin text (Persian, Arabic, ...); "
+                             "by default those glosses are dropped")
     parser.add_argument("--dry-run", action="store_true",
                         help="list what would be voiced and exit")
     return parser.parse_args(argv)
@@ -239,7 +306,8 @@ def main(argv=None):
         sys.exit("--engine voicebox needs --voicebox-profile "
                  "(list them: curl -s http://127.0.0.1:17493/profiles)")
 
-    clips = collect_clips(args.deck, fields, args.back_text)
+    clips = collect_clips(args.deck, fields, args.back_text,
+                          strip_non_latin=not args.keep_non_latin)
     if not clips:
         return 1
 
@@ -256,7 +324,8 @@ def main(argv=None):
         backup(clips, backup_dir)
     if args.step in ("all", "generate"):
         if generate(clips, cache_dir, args.engine, args.voice, args.lang,
-                    args.elevenlabs_key, args.voicebox_profile):
+                    args.elevenlabs_key, args.voicebox_profile,
+                    jobs=max(1, args.jobs), retries=args.retries):
             print("Some clips failed; re-run to retry them "
                   "(finished ones are cached).")
     if args.step in ("all", "upload"):
