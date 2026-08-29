@@ -12,7 +12,7 @@ def main():
     if len(sys.argv) < 2:
         print("Usage: python add_tts.py <deck_name> [front_engine] [back_engine] [elevenlabs_api_key_file] [voicebox_profile_id]")
         print("  deck_name: Name of the Anki deck")
-        print("  front_engine: 'edge', 'gtts', 'elevenlabs', or 'voicebox' (default: 'edge')")
+        print("  front_engine: 'edge', 'gtts', 'elevenlabs', 'voicebox', or 'none' to skip Front (default: 'edge')")
         print("  back_engine: same choices, or 'none' to skip Back (default: 'edge')")
         print("  elevenlabs_api_key_file: Path to ElevenLabs API key file")
         print("                           (default: '/Users/tng/Projects/Language/FR/Anki_decks/elevenlabs_api_key.txt')")
@@ -33,7 +33,8 @@ def main():
     ELEVENLABS_API_KEY_FILE = sys.argv[4] if len(sys.argv) > 4 else "/Users/tng/Projects/Language/FR/Anki_decks/elevenlabs_api_key.txt"
     VOICEBOX_PROFILE_ID = sys.argv[5] if len(sys.argv) > 5 else None
 
-    # Check if back voice should be added
+    # Check if front/back voice should be added
+    ADD_FRONT_VOICE = FRONT_ENGINE.lower() != "none"
     ADD_BACK_VOICE = BACK_ENGINE.lower() != "none"
     
     FRONT_FIELD = "Front"   # فیلد جمله یا عبارت فرانسوی
@@ -50,7 +51,7 @@ def main():
     # 1️⃣ یافتن کارت‌ها
     cards = invoke("findCards", query=f'deck:"{DECK_NAME}"')
     print(f"✅ {len(cards)} کارت در دک '{DECK_NAME}' یافت شد.")
-    print(f"🔊 موتور TTS برای Front: {FRONT_ENGINE.upper()}")
+    print(f"🔊 موتور TTS برای Front: {FRONT_ENGINE.upper() if ADD_FRONT_VOICE else 'خیر'}")
     print(f"� موتور TTS برای Back: {BACK_ENGINE.upper() if ADD_BACK_VOICE else 'خیر'}\n")
 
     notes = invoke("cardsToNotes", cards=cards)
@@ -67,7 +68,7 @@ def main():
             continue
 
         # ---------- FRONT ----------
-        if front_val.strip() and "[sound:" not in front_val:
+        if ADD_FRONT_VOICE and front_val.strip() and "[sound:" not in front_val:
             clean_front = strip_html(front_val)
             if clean_front.strip():
                 front_name = f"tts_{note_id}_front.mp3"

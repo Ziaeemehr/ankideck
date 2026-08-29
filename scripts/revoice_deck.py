@@ -168,7 +168,7 @@ def backup(clips, backup_dir):
 
 
 def generate(clips, cache_dir, engine, voice, lang, elevenlabs_key,
-             voicebox_profile, jobs=1, retries=4):
+             voicebox_profile, jobs=1, retries=4, rate=None):
     os.makedirs(cache_dir, exist_ok=True)
     todo = [c for c in clips if not os.path.exists(os.path.join(cache_dir, c[0]))]
     print(f"generate: {len(clips) - len(todo)} cached, {len(todo)} to synthesize "
@@ -201,6 +201,7 @@ def generate(clips, cache_dir, engine, voice, lang, elevenlabs_key,
                 voice=voice,
                 elevenlabs_api_key_file=elevenlabs_key,
                 voicebox_profile_id=voicebox_profile,
+                rate=rate,
             )
             ok = bool(path) and os.path.exists(path) and os.path.getsize(path) > 0
             if ok:
@@ -256,6 +257,9 @@ def parse_args(argv=None):
                         help="TTS engine for the new audio (default: edge)")
     parser.add_argument("--voice", default=None,
                         help="engine voice override, e.g. fr-FR-HenriNeural")
+    parser.add_argument("--rate", default=None,
+                        help="edge engine speaking-rate offset, e.g. -15%% for slower "
+                             "(default: engine's normal rate)")
     parser.add_argument("--lang", default="fr", help="language code (default: fr)")
     parser.add_argument("--fields", default="Front,Back",
                         help="comma-separated fields to re-voice (default: Front,Back)")
@@ -316,7 +320,7 @@ def main(argv=None):
     if args.step in ("all", "generate"):
         if generate(clips, cache_dir, args.engine, args.voice, args.lang,
                     args.elevenlabs_key, args.voicebox_profile,
-                    jobs=max(1, args.jobs), retries=args.retries):
+                    jobs=max(1, args.jobs), retries=args.retries, rate=args.rate):
             print("Some clips failed; re-run to retry them "
                   "(finished ones are cached).")
     if args.step in ("all", "upload"):

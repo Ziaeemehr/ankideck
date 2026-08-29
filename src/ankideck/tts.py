@@ -101,6 +101,7 @@ def make_tts_edge(
     voice: Optional[str] = None,
     pause: bool = False,
     pause_duration: int = 700,
+    rate: Optional[str] = None,
 ) -> Optional[str]:
     """Generate audio using Microsoft Edge TTS and save to audio_path.
 
@@ -125,7 +126,8 @@ def make_tts_edge(
         return None
 
     async def _synth(text: str, out_path: str) -> None:
-        communicate = edge_tts.Communicate(text, voice_name)
+        kwargs = {"rate": rate} if rate else {}
+        communicate = edge_tts.Communicate(text, voice_name, **kwargs)
         await communicate.save(out_path)
 
     try:
@@ -288,6 +290,7 @@ def make_tts(
     voicebox_profile_id: Optional[str] = None,
     voicebox_host: str = VOICEBOX_HOST,
     voicebox_engine: str = "kokoro",
+    rate: Optional[str] = None,
 ) -> Optional[str]:
     """Generate TTS audio and cache it to disk.
 
@@ -346,4 +349,5 @@ def make_tts(
         voice=voice,
         pause=pause,
         pause_duration=pause_duration,
+        rate=rate,
     )

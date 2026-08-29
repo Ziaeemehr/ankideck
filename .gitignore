@@ -173,3 +173,6 @@ tts_cache_*/
 # API keys — never commit these
 *api_key*.txt
 *_api_key*
+
+# Deck manifests — contain the actual card content
+scripts/*/manifest*.json
